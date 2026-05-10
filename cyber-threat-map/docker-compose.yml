@@ -1,0 +1,214 @@
+# Docker Compose конфигурация для развертывания Карты Киберугроз
+# Определяет все сервисы: PostgreSQL, Redis, Backend, Frontend, Celery
+
+version: '3.8'  # Версия формата Docker Compose
+
+# Определение сетей для изоляции сервисов
+networks:
+  cyber_threat_network:  # Основная сеть для всех сервисов
+    driver: bridge  # Тип сети - bridge (мост)
+
+# Определение томов для постоянного хранения данных
+volumes:
+  postgres_data:  # Том для данных PostgreSQL
+    driver: local  # Локальный драйвер хранения
+  redis_data:  # Том для данных Redis
+    driver: local
+
+# Определение сервисов (контейнеров)
+services:
+  # Сервис базы данных PostgreSQL
+  db:
+    image: postgres:15-alpine  # Образ PostgreSQL 15 (Alpine для минимального размера)
+    container_name: cyber_threat_db  # Имя контейнера
+    restart: unless-stopped  # Автоматический перезапуск если контейнер упал (кроме ручной остановки)
+    
+    # Переменные окружения для настройки PostgreSQL
+    environment:
+      POSTGRES_DB: cyber_threat_db  # Имя базы данных
+      POSTGRES_USER: cyber_user  # Пользователь БД
+      POSTGRES_PASSWORD: cyber_secure_password_2024  # Пароль БД (изменить в продакшене!)
+      PGDATA: /var/lib/postgresql/data/pgdata  # Путь к данным
+    
+    # Маппинг портов: хост:контейнер
+    ports:
+      - "5432:5432"  # Доступ к PostgreSQL с хоста (опционально для отладки)
+    
+    # Монтирование томов для сохранения данных
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Постоянное хранение данных БД
+    
+    # Подключение к сети
+    networks:
+      - cyber_threat_network
+    
+    # Проверка здоровья контейнера
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyber_user -d cyber_threat_db"]  # Команда проверки
+      interval: 10s  # Интервал между проверками
+      timeout: 5s  # Таймаут проверки
+      retries: 5  # Количество попыток перед признанием нездоровым
+
+  # Сервис кэша и брокера сообщений Redis
+  redis:
+    image: redis:7-alpine  # Образ Redis 7 (Alpine версия)
+    container_name: cyber_threat_redis  # Имя контейнера
+    restart: unless-stopped  # Автоматический перезапуск
+    
+    # Порт Redis
+    ports:
+      - "6379:6379"  # Доступ к Redis с хоста
+    
+    # Том для persistence (опционально)
+    volumes:
+      - redis_data:/data  # Сохранение данных Redis
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Проверка здоровья
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]  # Проверка через redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Сервис бэкенда Django
+  backend:
+    build:
+      context: ./backend  # Путь к директории с Dockerfile бэкенда
+      dockerfile: Dockerfile  # Имя файла Dockerfile
+    container_name: cyber_threat_backend  # Имя контейнера
+    restart: unless-stopped  # Автоматический перезапуск
+    
+    # Переменные окружения для Django
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz  # Секретный ключ Django
+      DJANGO_DEBUG: "True"  # Режим отладки (False в продакшене!)
+      DJANGO_ALLOWED_HOSTS: "*"  # Разрешенные хосты
+      
+      # Настройки подключения к БД (должны совпадать с сервисом db)
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db  # Имя сервиса db в Docker сети
+      POSTGRES_PORT: 5432
+      
+      # Настройки Redis
+      REDIS_URL: redis://redis:6379/0  # URL для подключения к Redis
+    
+    # Зависимости от других сервисов
+    depends_on:
+      db:
+        condition: service_healthy  # Ждем пока БД будет готова
+      redis:
+        condition: service_healthy  # Ждем пока Redis будет готов
+    
+    # Порты бэкенда
+    ports:
+      - "8000:8000"  # Django сервер на порту 8000
+    
+    # Монтирование кода для разработки (опционально)
+    volumes:
+      - ./backend:/app  # Синхронизация кода с контейнером (для разработки)
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска (переопределяет CMD из Dockerfile)
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --workers 4 cyber_threat_map.wsgi:application"
+
+  # Сервис фронтенда React + Nginx
+  frontend:
+    build:
+      context: ./frontend  # Путь к директории с Dockerfile фронтенда
+      dockerfile: Dockerfile
+    container_name: cyber_threat_frontend  # Имя контейнера
+    restart: unless-stopped  # Автоматический перезапуск
+    
+    # Зависимость от бэкенда
+    depends_on:
+      - backend
+    
+    # Порты фронтенда
+    ports:
+      - "80:80"  # Nginx на порту 80 (основной HTTP порт)
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+
+  # Сервис Celery для фоновых задач
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_threat_celery  # Имя контейнера
+    restart: unless-stopped
+    
+    # Те же переменные окружения что и у бэкенда
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    
+    # Зависимости
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска Celery worker
+    command: >
+      sh -c "celery -A cyber_threat_map worker --loglevel=info --pool=solo"
+    
+    # Том для кода
+    volumes:
+      - ./backend:/app
+
+  # Сервис Celery Beat для периодических задач
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_threat_celery_beat
+    restart: unless-stopped
+    
+    # Переменные окружения
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    
+    # Зависимости
+    depends_on:
+      - redis
+      - db
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска Celery Beat
+    command: >
+      sh -c "celery -A cyber_threat_map beat --loglevel=info"

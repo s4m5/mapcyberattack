@@ -1,0 +1,47 @@
+# Python зависимости для бэкенда карты киберугроз
+# Все пакеты устанавливаются через pip install -r requirements.txt
+
+# Django - веб-фреймворк для бэкенда
+Django==5.0.6
+
+# Django REST Framework - библиотека для создания REST API
+djangorestframework==3.15.1
+
+# django-cors-headers - поддержка CORS для доступа с фронтенда
+django-cors-headers==4.3.1
+
+# djangorestframework-simplejwt - JWT аутентификация для API
+djangorestframework-simplejwt==5.3.1
+
+# psycopg2-binary - драйвер PostgreSQL для Python
+psycopg2-binary==2.9.9
+
+# celery - распределенная очередь задач для фоновой обработки
+celery==5.3.6
+
+# redis - клиент Redis для кэширования и брокера сообщений
+redis==5.0.4
+
+# requests - HTTP библиотека для запросов к внешним API (GeoIP)
+requests==2.31.0
+
+# geoip2 - библиотека для определения геолокации по IP
+geoip2==4.8.0
+
+# python-dateutil - утилиты для работы с датами
+python-dateutil==2.9.0.post0
+
+# pytz - поддержка часовых поясов
+pytz==2024.1
+
+# Pillow - библиотека для работы с изображениями (нужна для Django admin)
+Pillow==10.3.0
+
+# gunicorn - WSGI сервер для продакшена
+gunicorn==22.0.0
+
+# watchdog - мониторинг изменений файлов для автоперезагрузки
+watchdog==4.0.0
+
+# maxminddb - база данных MaxMind для GeoIP
+maxminddb==2.6.0
