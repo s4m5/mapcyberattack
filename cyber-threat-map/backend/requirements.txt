@@ -1,0 +1,69 @@
+# Требования для проекта Интерактивная Карта Киберугроз
+# Все зависимости необходимые для работы бэкенда на Django
+
+# Основной фреймворк Django (версия 4.2 LTS)
+Django==4.2.18
+
+# Django REST Framework для создания API
+djangorestframework==3.15.2
+
+# Токенная аутентификация для DRF
+djangorestframework-simplejwt==5.3.1
+
+# Поддержка CORS заголовков для фронтенда
+django-cors-headers==4.4.0
+
+# Асинхронные WebSocket соединения
+channels==4.1.0
+
+# Каналы Redis для production (опционально)
+channels-redis==4.2.0
+
+# GeoIP2 для определения геолокации по IP
+geoip2==4.8.1
+
+# MaxMind DB для работы с GeoIP базами
+maxminddb==2.6.2
+
+# HTTP библиотека для запросов к внешним API
+requests==2.32.3
+
+# Утилита для работы с окружением
+python-dotenv==1.0.1
+
+# PostgreSQL адаптер (если используется PostgreSQL вместо SQLite)
+psycopg2-binary==2.9.9
+
+# Gunicorn WSGI сервер для production
+gunicorn==23.0.0
+
+# Утилиты для работы с датой и временем
+python-dateutil==2.9.0.post0
+
+# Валидация и парсинг данных
+pydantic==2.9.2
+
+# Логирование и мониторинг
+watchdog==4.0.2
+
+# Криптография для безопасных соединений
+cryptography==43.0.3
+
+# JWT токены
+PyJWT==2.9.0
+
+# Обработка изображений (если потребуется)
+Pillow==10.4.0
+
+# Утилиты для разработки
+django-debug-toolbar==4.4.6
+
+# Тестирование
+pytest==8.3.3
+pytest-django==4.9.0
+pytest-cov==5.0.0
+
+# Форматирование кода
+black==24.10.0
+flake8==7.1.1
+isort==5.13.2
