@@ -23,7 +23,7 @@ celery==5.3.6
 redis==5.0.4
 
 # requests - HTTP библиотека для запросов к внешним API (GeoIP)
-requests==2.31.0
+requests>=2.32.2
 
 # geoip2 - библиотека для определения геолокации по IP
 geoip2==4.8.0
