@@ -1,16 +1,22 @@
 """
-WSGI конфигурация для проекта карты киберугроз.
-Используется для запуска Django приложения с Gunicorn или другими WSGI серверами.
+WSGI конфигурация для Django проекта.
+Точка входа для WSGI-совместимых веб-серверов (Gunicorn, uWSGI, mod_wsgi).
 """
 
-import os  # Импортируем модуль для работы с переменными окружения
+import os  # Импорт модуля для работы с переменными окружения
+import sys  # Импорт модуля для работы с системными параметрами
 
-from django.core.wsgi import get_wsgi_application  # Импортируем функцию получения WSGI приложения
+# Добавляем директорию проекта в PYTHONPATH для корректного импорта модулей
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Устанавливаем переменную окружения DJANGO_SETTINGS_MODULE
-# Это указывает Django какой файл настроек использовать
+# Устанавливаем переменную окружения с настройками Django
+# Это необходимо для инициализации Django приложения
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cyber_threat_map.settings')
 
-# Получаем стандартное WSGI приложение Django
-# Оно будет обрабатывать HTTP запросы от веб-сервера
+# Импортируем WSGI приложение после установки переменной окружения
+# Django не может быть инициализирован без DJANGO_SETTINGS_MODULE
+from django.core.wsgi import get_wsgi_application
+
+# Создаем WSGI приложение которое будет обрабатывать HTTP запросы
+# application - это callable объект который принимает environ и start_response
 application = get_wsgi_application()

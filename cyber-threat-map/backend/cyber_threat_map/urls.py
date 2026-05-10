@@ -1,33 +1,53 @@
 """
-URL конфигурация основного проекта Django.
-Определяет маршруты для всего приложения включая API и административную панель.
+Конфигурация URL маршрутов Django проекта.
+Определяет основные пути к API, админ-панели и другим эндпоинтам.
 """
 
-from django.contrib import admin  # Импортируем административную панель Django
-from django.urls import path, include  # Импортируем функции для работы с URL
-from django.conf import settings  # Импортируем настройки Django
-from django.conf.urls.static import static  # Импортируем функцию для обработки статических файлов
+from django.contrib import admin  # Импорт административной панели Django
+from django.urls import path, include  # Импорт функций для определения URL паттернов
+from django.http import JsonResponse  # Импорт для возврата JSON ответов
+from rest_framework.decorators import api_view, permission_classes  # Декораторы для API view
+from rest_framework.permissions import AllowAny  # Разрешение для публичного доступа
 
-# Определяем основные URL паттерны проекта
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def api_root(request):
+    """
+    Корневой эндпоинт API.
+    Возвращает информацию о доступных эндпоинтах и версии API.
+    
+    Args:
+        request: HTTP запрос
+        
+    Returns:
+        JSON ответ с информацией об API
+    """
+    return JsonResponse({
+        'message': 'Добро пожаловать в API Карты Киберугроз',  # Приветственное сообщение
+        'version': '1.0.0',  # Версия API
+        'endpoints': {  # Список доступных эндпоинтов
+            'attacks': '/api/attacks/',  # Эндпоинт для списка атак
+            'statistics': '/api/statistics/',  # Эндпоинт для статистики
+            'auth': '/api/auth/',  # Эндпоинт для аутентификации
+            'admin': '/admin/',  # Административная панель
+        },
+        'docs': '/api/docs/',  # Документация API (если доступна)
+    })
+
+
+# Основные URL паттерны проекта
 urlpatterns = [
-    # Административная панель Django (доступна только для суперпользователей)
+    # Административная панель Django по адресу /admin/
     path('admin/', admin.site.urls),
     
-    # API endpoints для карты киберугроз
-    # Все API запросы будут иметь префикс /api/
+    # API приложение по префиксу /api/
+    # Все маршруты из api/urls.py будут доступны с префиксом /api/
     path('api/', include('api.urls')),
     
-    # Аутентификация через Django REST Framework (браузерная)
+    # Корневой путь возвращает информацию об API
+    path('', api_root, name='api-root'),
+    
+    # API браузер DRF для удобного просмотра API (только в режиме отладки)
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
 ]
-
-# Добавляем обработку статических файлов в режиме отладки (DEBUG=True)
-# В продакшене статические файлы должен обслуживать веб-сервер (nginx, apache)
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-
-# Заголовки для документации API
-admin.site.site_header = "Карта Киберугроз - Администрирование"
-admin.site.site_title = "Карта Киберугроз Admin"
-admin.site.index_title = "Панель управления системой безопасности"

@@ -1,220 +1,231 @@
-#!/usr/bin/env python3
 """
-Файл настроек Django проекта для карты киберугроз.
-Содержит все необходимые конфигурации для работы приложения.
+Настройки Django проекта для системы карты киберугроз.
+Конфигурация включает базы данных, безопасность, middleware, шаблоны и API.
 """
 
-import os
-from pathlib import Path
-from datetime import timedelta
+from pathlib import Path  # Импорт модуля для работы с путями файловых систем
+import os  # Импорт модуля для работы с переменными окружения
+from datetime import timedelta  # Импорт timedelta для настройки времени жизни JWT токенов
 
-# Получение абсолютного пути к базовой директории проекта
+# Построение абсолютного пути к базовой директории проекта (backend/)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Секретный ключ для криптографической подписи сессий и токенов
-# В продакшене необходимо заменить на случайную строку
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cyber-threat-map-key-change-in-production')
+# Секретный ключ Django для криптографической подписи сессий, токенов и т.д.
+# В продакшене должен храниться в переменной окружения для безопасности
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-cyber-threat-map-dev-key-change-in-production')
 
 # Режим отладки: True для разработки, False для продакшена
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+# Включает подробные страницы ошибок и автоперезагрузку сервера
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-# Разрешенные хосты для доступа к приложению
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# Список разрешенных хостов для доступа к сайту
+# В продакшене необходимо указать реальные доменные имена
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
-# Приложения Django установленные в проекте
+# Приложения Django которые будут использоваться в проекте
 INSTALLED_APPS = [
-    'django.contrib.admin',  # Административная панель Django
-    'django.contrib.auth',  # Система аутентификации пользователей
+    # Стандартные приложения Django
+    'django.contrib.admin',  # Административная панель
+    'django.contrib.auth',  # Система аутентификации
     'django.contrib.contenttypes',  # Система типов контента
-    'django.contrib.sessions',  # Управление сессиями пользователей
-    'django.contrib.messages',  # Система сообщений для пользователей
+    'django.contrib.sessions',  # Система сессий
+    'django.contrib.messages',  # Система сообщений
     'django.contrib.staticfiles',  # Обработка статических файлов
-    'rest_framework',  # Django REST Framework для API
-    'rest_framework.authtoken',  # Токенная аутентификация
-    'corsheaders',  # Поддержка CORS для фронтенда
-    'channels',  # Асинхронные WebSocket соединения
-    'api',  # Основное приложение карты киберугроз
+    
+    # Сторонние приложения
+    'rest_framework',  # Django REST Framework для создания API
+    'rest_framework_simplejwt',  # JWT аутентификация
+    'corsheaders',  # Поддержка CORS для доступа с других доменов
+    
+    # Локальные приложения проекта
+    'api',  # Основное приложение с моделями и API карты киберугроз
 ]
 
-# Промежуточное ПО (middleware) для обработки запросов
+# Middleware - компоненты обрабатывающие запросы и ответы
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',  # Безопасность HTTP запросов
-    'corsheaders.middleware.CorsMiddleware',  # Обработка CORS заголовков
+    'django.middleware.security.SecurityMiddleware',  # Безопасность запросов
+    'corsheaders.middleware.CorsMiddleware',  # CORS обработка (должен быть первым)
     'django.contrib.sessions.middleware.SessionMiddleware',  # Управление сессиями
-    'django.middleware.common.CommonMiddleware',  # Общие настройки Django
+    'django.middleware.common.CommonMiddleware',  # Общие настройки URL
     'django.middleware.csrf.CsrfViewMiddleware',  # Защита от CSRF атак
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # Аутентификация пользователей
     'django.contrib.messages.middleware.MessageMiddleware',  # Обработка сообщений
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # Защита от clickjacking
 ]
 
-# Настройка URL корневого модуля
+# Корневой URL конфигурации
 ROOT_URLCONF = 'cyber_threat_map.urls'
 
-# Шаблоны для рендеринга HTML страниц
+# Настройка шаблонизатора Django для рендеринга HTML
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],  # Директории с шаблонами
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',  # Движок шаблонов
+        'DIRS': [],  # Дополнительные директории шаблонов (пусто для API-only проекта)
         'APP_DIRS': True,  # Искать шаблоны в директориях приложений
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',  # Отладочная информация
-                'django.template.context_processors.request',  # Объект request в контексте
-                'django.contrib.auth.context_processors.auth',  # Данные аутентификации
+                'django.template.context_processors.request',  # Объект request
+                'django.contrib.auth.context_processors.auth',  # Данные пользователя
                 'django.contrib.messages.context_processors.messages',  # Сообщения
             ],
         },
     },
 ]
 
-# Конфигурация ASGI для WebSocket соединений
-ASGI_APPLICATION = 'cyber_threat_map.asgi.application'
+# WSGI приложение для запуска сервера
+WSGI_APPLICATION = 'cyber_threat_map.wsgi.application'
 
-# Настройки базы данных SQLite по умолчанию
+# Конфигурация базы данных PostgreSQL
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',  # Используем SQLite
-        'NAME': BASE_DIR / 'db.sqlite3',  # Путь к файлу базы данных
+        'ENGINE': 'django.db.backends.postgresql',  # Движок PostgreSQL
+        'NAME': os.environ.get('POSTGRES_DB', 'cyber_threat_db'),  # Имя базы данных
+        'USER': os.environ.get('POSTGRES_USER', 'cyber_user'),  # Пользователь БД
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'cyber_password'),  # Пароль БД
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),  # Хост БД
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),  # Порт БД
     }
 }
 
-# Для продакшена рекомендуется использовать PostgreSQL:
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.environ.get('DB_NAME', 'cyber_threat_map'),
-#         'USER': os.environ.get('DB_USER', 'cyber_user'),
-#         'PASSWORD': os.environ.get('DB_PASSWORD', 'secure_password'),
-#         'HOST': os.environ.get('DB_HOST', 'localhost'),
-#         'PORT': os.environ.get('DB_PORT', '5432'),
-#     }
-# }
-
-# Кастомная модель пользователя
-AUTH_USER_MODEL = 'api.User'
-
-# Настройки парольной валидации
+# Настройка парольной валидации для безопасности пользователей
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'OPTIONS': {
+            'user_attributes': ['username', 'email'],  # Проверка на схожесть с username/email
+        },
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,  # Минимальная длина пароля
+        },
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',  # Проверка на распространенные пароли
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',  # Запрет чисто числовых паролей
     },
 ]
 
-# Локализация приложения
+# Язык интерфейса по умолчанию
 LANGUAGE_CODE = 'ru-ru'  # Русский язык
-TIME_ZONE = 'UTC'  # Часовой пояс UTC
-USE_I18N = True  # Интернационализация включена
-USE_TZ = True  # Использование временных зон
 
-# Статические файлы (CSS, JavaScript, изображения)
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # Директория для сбора статических файлов
+# Часовой пояс для отображения времени
+TIME_ZONE = 'Europe/Moscow'  # Московское время
 
-# Медиа файлы (загружаемые пользователями)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Использование интернационализации
+USE_I18N = True  # Включить переводы
+
+# Использование локализации форматов чисел и дат
+USE_L10N = True  # Локализованные форматы
+
+# Использование timezone-aware дат и времени
+USE_TZ = True  # Датирование с учетом часовых поясов
+
+# Директория для сбора статических файлов (CSS, JS, изображения)
+STATIC_URL = '/static/'  # URL для доступа к статике
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # Директория для собранной статики
+
+# Тип пользовательской модели (кастомная модель User вместо стандартной)
+AUTH_USER_MODEL = 'api.User'
 
 # Настройки Django REST Framework
 REST_FRAMEWORK = {
+    # Классы аутентификации: JWT токен или базовая авторизация
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',  # Токенная аутентификация
+        'rest_framework_simplejwt.authentication.JWTAuthentication',  # JWT токены
         'rest_framework.authentication.SessionAuthentication',  # Сессионная аутентификация
     ],
+    # Разрешения: только авторизованные пользователи
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  # Требуется аутентификация
+        'rest_framework.permissions.IsAuthenticated',
     ],
+    # Пагинация ответов API
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 100,  # Количество записей на странице
+    'PAGE_SIZE': 50,  # Количество записей на странице
+    # Фильтры для поиска и фильтрации данных
     'DEFAULT_FILTER_BACKENDS': [
-        'rest_framework.filters.OrderingFilter',  # Фильтрация по полям
-        'rest_framework.filters.SearchFilter',  # Поиск по полям
+        'rest_framework.filters.SearchFilter',  # Поиск по тексту
+        'rest_framework.filters.OrderingFilter',  # Сортировка
     ],
 }
 
-# Настройки CORS для фронтенда
+# Настройки JWT токенов для аутентификации
+SIMPLE_JWT = {
+    # Время жизни access токена (короткоживущий токен для доступа к API)
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    # Время жизни refresh токена (долгоживущий токен для обновления access)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    # Алгоритм подписи токенов
+    'ALGORITHM': 'HS256',
+    # Ключ для подписи токенов (используется SECRET_KEY)
+    'SIGNING_KEY': SECRET_KEY,
+    # Разрешить обновление токенов
+    'ROTATE_REFRESH_TOKENS': True,
+    # Запретить повторное использование refresh токенов
+    'BLACKLIST_AFTER_ROTATION': True,
+}
+
+# Настройки CORS для доступа с фронтенда
 CORS_ALLOWED_ORIGINS = os.environ.get(
     'CORS_ALLOWED_ORIGINS',
-    'http://localhost:3000,http://127.0.0.1:3000'
+    'http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080'
 ).split(',')
 
-# Настройки Channels для WebSocket
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',  # Для разработки
-        # Для продакшена использовать Redis:
-        # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        # 'CONFIG': {
-        #     'hosts': [('redis', 6379)],
-        # },
-    },
-}
+# Разрешить передачу credentials (cookies, authorization headers) через CORS
+CORS_ALLOW_CREDENTIALS = True
 
-# Логирование приложения
+# Логгирование - настройка системы логов Django
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
+    'version': 1,  # Версия конфигурации логгирования
+    'disable_existing_loggers': False,  # Не отключать существующие логгеры
     'formatters': {
         'verbose': {
+            # Подробный формат логов с временем, уровнем, модулем и сообщением
             'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            # Простой формат: уровень и сообщение
+            'format': '{levelname} {message}',
             'style': '{',
         },
     },
     'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'cyber_threat_map.log',
-            'formatter': 'verbose',
-        },
         'console': {
-            'level': 'DEBUG',
+            # Вывод логов в консоль
             'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'level': 'DEBUG' if DEBUG else 'INFO',
+        },
+        'file': {
+            # Вывод логов в файл
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'debug.log',
             'formatter': 'verbose',
+            'level': 'DEBUG',
         },
     },
     'root': {
-        'handlers': ['file', 'console'],
+        # Корневой логгер: все логи пишутся в консоль и файл
+        'handlers': ['console', 'file'],
         'level': 'INFO',
     },
     'loggers': {
-        'api': {
-            'handlers': ['file', 'console'],
+        'django': {
+            # Логгер Django: наследует handlers от root
+            'handlers': ['console', 'file'],
             'level': 'INFO',
+            'propagate': False,
+        },
+        'api': {
+            # Логгер приложения api
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
 }
-
-# Настройки для парсинга логов
-SYSLOG_FILE = os.environ.get('SYSLOG_FILE', '/var/log/syslog')  # Путь к syslog
-FIREWALL_LOG_FILE = os.environ.get('FIREWALL_LOG_FILE', '/var/log/kern.log')  # Путь к логам фаервола
-POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '5'))  # Интервал опроса логов в секундах
-
-# GeoIP база данных
-GEOIP_DB_PATH = os.environ.get('GEOIP_DB_PATH', '/usr/share/geoip/GeoLite2-City.mmdb')
-
-# Цвета для протоколов
-PROTOCOL_COLORS = {
-    'TCP': '#00ff00',  # Зеленый
-    'UDP': '#0000ff',  # Синий
-    'ICMP': '#ff0000',  # Красный
-    'HTTP': '#ffff00',  # Желтый
-    'HTTPS': '#00ffff',  # Голубой
-    'SSH': '#ff00ff',  # Маджента
-    'FTP': '#ffa500',  # Оранжевый
-    'DNS': '#800080',  # Фиолетовый
-    'OTHER': '#ffffff',  # Белый
-}
-
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

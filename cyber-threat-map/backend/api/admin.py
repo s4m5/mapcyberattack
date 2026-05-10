@@ -1,192 +1,227 @@
 """
-Административная панель Django для управления моделями карты киберугроз.
-Предоставляет интерфейс для просмотра и управления данными через веб-интерфейс.
+Административная панель Django для приложения карты киберугроз.
+Предоставляет интерфейс для управления данными через /admin/
 """
 
-from django.contrib import admin  # Импортируем модуль административной панели
-from .models import CyberAttack, AttackStatistics, SystemConfig, User  # Импортируем модели
+from django.contrib import admin  # Импорт административной панели Django
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin  # Базовый класс админки пользователя
+from api.models import User, CyberAttack, AttackStatistics, SystemConfig  # Импорт моделей
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(BaseUserAdmin):
     """
-    Административная конфигурация для модели пользователя.
-    Отображает список пользователей с основными полями.
+    Административная панель для модели пользователя.
+    Наследуется от стандартной UserAdmin с кастомизацией.
     """
-    
-    list_display = [  # Поля отображаемые в списке пользователей
+    # Поля отображаемые в списке пользователей
+    list_display = [
         'username',  # Имя пользователя
-        'email',  # Email адрес
-        'first_name',  # Имя
-        'last_name',  # Фамилия
+        'email',  # Email
         'is_active',  # Статус активности
         'created_at',  # Дата создания
         'updated_at',  # Дата обновления
     ]
     
-    list_filter = [  # Фильтры в правой панели
-        'is_active',  # Фильтр по активности
-        'created_at',  # Фильтр по дате создания
-    ]
+    # Поля для фильтрации в правой панели
+    list_filter = ['is_active', 'created_at', 'updated_at']
     
-    search_fields = [  # Поля для поиска
-        'username',  # Поиск по имени пользователя
-        'email',  # Поиск по email
-        'first_name',  # Поиск по имени
-        'last_name',  # Поиск по фамилии
-    ]
+    # Поля для поиска по пользователям
+    search_fields = ['username', 'email', 'first_name', 'last_name']
     
-    ordering = ['-created_at']  # Сортировка по умолчанию (новые первыми)
+    # Поля которые можно редактировать прямо из списка
+    list_editable = ['is_active']
+    
+    # Порядок сортировки по умолчанию
+    ordering = ['-created_at']
+    
+    # Группировка полей в форме редактирования
+    fieldsets = (
+        (None, {'fields': ('username', 'password')}),  # Основная информация
+        ('Персональная информация', {'fields': ('first_name', 'last_name', 'email')}),
+        ('Права доступа', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Даты', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+    
+    # Поля при создании нового пользователя
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('username', 'email', 'password1', 'password2'),
+        }),
+    )
 
 
 @admin.register(CyberAttack)
 class CyberAttackAdmin(admin.ModelAdmin):
     """
-    Административная конфигурация для модели кибератаки.
-    Предоставляет детальный просмотр и фильтрацию атак.
+    Административная панель для модели кибератаки.
+    Позволяет просматривать и фильтровать атаки.
     """
-    
-    list_display = [  # Поля отображаемые в списке атак
-        'source_ip',  # IP адрес источника
-        'target_ip',  # IP адрес цели
-        'target_port',  # Целевой порт
+    # Поля отображаемые в списке атак
+    list_display = [
+        'source_ip',  # IP источника
+        'target_ip',  # IP цели
+        'target_port',  # Порт цели
         'protocol',  # Протокол
         'attack_type',  # Тип атаки
+        'country',  # Страна
         'severity',  # Уровень опасности
-        'country',  # Страна источника
         'timestamp',  # Время атаки
     ]
     
-    list_filter = [  # Фильтры в правой панели
-        'protocol',  # Фильтр по протоколу
-        'attack_type',  # Фильтр по типу атаки
-        'severity',  # Фильтр по уровню опасности
-        'country',  # Фильтр по стране
-        'firewall_action',  # Фильтр по действию фаервола
-        'timestamp',  # Фильтр по времени
+    # Поля для фильтрации
+    list_filter = [
+        'protocol',  # По протоколу
+        'severity',  # По уровню опасности
+        'firewall_action',  # По действию фаервола
+        'country',  # По стране
+        'attack_type',  # По типу атаки
+        'timestamp',  # По времени
     ]
     
-    search_fields = [  # Поля для поиска
+    # Поля для поиска
+    search_fields = [
         'source_ip',  # Поиск по IP источника
         'target_ip',  # Поиск по IP цели
         'attack_type',  # Поиск по типу атаки
         'country',  # Поиск по стране
-        'city',  # Поиск по городу
+        'raw_log',  # Поиск в исходном логе
     ]
     
-    readonly_fields = [  # Поля только для чтения
-        'created_at',  # Дата создания
-        'updated_at',  # Дата обновления
+    # Поля только для чтения (нельзя изменять через админку)
+    readonly_fields = [
+        'source_ip', 'target_ip', 'source_port', 'target_port',
+        'protocol', 'attack_type', 'vulnerability_type',
+        'country', 'city', 'latitude', 'longitude',
+        'timestamp', 'severity', 'firewall_action',
+        'raw_log', 'created_at', 'updated_at',
     ]
     
-    ordering = ['-timestamp']  # Сортировка по умолчанию (новые первыми)
+    # Порядок сортировки
+    ordering = ['-timestamp']
     
-    date_hierarchy = 'timestamp'  # Иерархическая навигация по дате
+    # Дата иерархия для навигации по датам
+    date_hierarchy = 'timestamp'
     
-    fieldsets = (  # Группировка полей в форме редактирования
-        ('Основная информация', {
+    # Группировка полей в форме просмотра
+    fieldsets = (
+        ('Сетевая информация', {
             'fields': (
-                'source_ip',  # IP источника
-                'target_ip',  # IP цели
-                'source_port',  # Порт источника
-                'target_port',  # Порт цели
+                'source_ip', 'source_port',
+                'target_ip', 'target_port',
+                'protocol',
             )
         }),
         ('Классификация атаки', {
             'fields': (
-                'protocol',  # Протокол
-                'attack_type',  # Тип атаки
-                'vulnerability_type',  # Тип уязвимости
-                'severity',  # Уровень опасности
+                'attack_type',
+                'vulnerability_type',
+                'severity',
+                'firewall_action',
             )
         }),
         ('Геолокация', {
             'fields': (
-                'country',  # Страна
-                'city',  # Город
-                'latitude',  # Широта
-                'longitude',  # Долгота
-            )
+                'country',
+                'city',
+                'latitude',
+                'longitude',
+            ),
+            'classes': ('collapse',),
         }),
         ('Метаданные', {
             'fields': (
-                'timestamp',  # Время атаки
-                'firewall_action',  # Действие фаервола
-                'raw_log',  # Исходный лог
-            )
-        }),
-        ('Системные поля', {
-            'fields': (
-                'created_at',  # Дата создания
-                'updated_at',  # Дата обновления
+                'timestamp',
+                'raw_log',
+                'created_at',
+                'updated_at',
             ),
-            'classes': ('collapse',),  # Свернутая секция
+            'classes': ('collapse',),
         }),
     )
+    
+    # Количество записей на странице
+    list_per_page = 50
 
 
 @admin.register(AttackStatistics)
 class AttackStatisticsAdmin(admin.ModelAdmin):
     """
-    Административная конфигурация для модели статистики атак.
-    Отображает агрегированные данные за каждый день.
+    Административная панель для модели статистики атак.
     """
-    
-    list_display = [  # Поля отображаемые в списке статистики
+    # Поля в списке
+    list_display = [
         'date',  # Дата статистики
-        'total_attacks',  # Общее количество атак
-        'unique_sources',  # Количество уникальных источников
-        'created_at',  # Дата создания записи
-        'updated_at',  # Дата обновления записи
-    ]
-    
-    list_filter = [  # Фильтры в правой панели
-        'date',  # Фильтр по дате
-    ]
-    
-    search_fields = [  # Поля для поиска
-        'date',  # Поиск по дате
-    ]
-    
-    readonly_fields = [  # Поля только для чтения
-        'top_attack_types',  # Топ типов атак (JSON)
-        'top_vulnerabilities',  # Топ уязвимостей (JSON)
-        'top_ports',  # Топ портов (JSON)
-        'top_countries',  # Топ стран (JSON)
+        'total_attacks',  # Всего атак
+        'unique_sources',  # Уникальных источников
         'created_at',  # Дата создания
-        'updated_at',  # Дата обновления
     ]
     
-    ordering = ['-date']  # Сортировка по умолчанию (новые первыми)
+    # Фильтры
+    list_filter = ['date', 'created_at']
     
-    date_hierarchy = 'date'  # Иерархическая навигация по дате
+    # Поля только для чтения
+    readonly_fields = [
+        'date',
+        'top_attack_types',
+        'top_vulnerabilities',
+        'top_ports',
+        'top_countries',
+        'total_attacks',
+        'unique_sources',
+        'created_at',
+        'updated_at',
+    ]
+    
+    # Сортировка
+    ordering = ['-date']
+    
+    # Группировка полей
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('date', 'total_attacks', 'unique_sources')
+        }),
+        ('Топ показателей', {
+            'fields': (
+                'top_attack_types',
+                'top_vulnerabilities',
+                'top_ports',
+                'top_countries',
+            ),
+            'classes': ('collapse',),
+        }),
+        ('Системные поля', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 @admin.register(SystemConfig)
 class SystemConfigAdmin(admin.ModelAdmin):
     """
-    Административная конфигурация для модели системной конфигурации.
-    Позволяет управлять настройками системы через админ-панель.
+    Административная панель для системных настроек.
     """
-    
-    list_display = [  # Поля отображаемые в списке настроек
+    # Поля в списке
+    list_display = [
         'key',  # Ключ настройки
-        'value',  # Значение настройки
-        'description',  # Описание настройки
-        'updated_at',  # Дата последнего обновления
-    ]
-    
-    list_filter = [  # Фильтры в правой панели
-        'updated_at',  # Фильтр по дате обновления
-    ]
-    
-    search_fields = [  # Поля для поиска
-        'key',  # Поиск по ключу
-        'description',  # Поиск по описанию
-    ]
-    
-    readonly_fields = [  # Поля только для чтения
+        'value',  # Значение (обрезается)
+        'description',  # Описание
         'updated_at',  # Дата обновления
     ]
     
-    ordering = ['key']  # Сортировка по ключу
+    # Поля для поиска
+    search_fields = ['key', 'description']
+    
+    # Поля только для чтения
+    readonly_fields = ['updated_at']
+    
+    # Сортировка
+    ordering = ['key']
+
+
+# Заголовок административной панели
+admin.site.site_header = 'Карта Киберугроз - Администрирование'
+admin.site.site_title = 'Карта Киберугроз Admin'
+admin.site.index_title = 'Панель управления'

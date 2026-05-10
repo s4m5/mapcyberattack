@@ -1,47 +1,46 @@
 """
-URL конфигурация для API карты киберугроз.
-Определяет маршруты (endpoints) для всех представлений API.
+URL маршруты для API приложения карты киберугроз.
+Определяет эндпоинты для доступа к атакам, статистике и аутентификации.
 """
 
-from django.urls import path, include  # Импортируем функции для работы с URL
-from rest_framework.routers import DefaultRouter  # Импортируем роутер для автоматической генерации URL
-from . import views  # Импортируем представления из текущего приложения
+from django.urls import path, include  # Импорт функций для определения URL паттернов
+from rest_framework.routers import DefaultRouter  # Импорт роутера DRF для автоматической генерации URL
+from api.views import (
+    CyberAttackViewSet,  # ViewSet для управления атаками
+    AttackStatisticsViewSet,  # ViewSet для статистики
+    SystemConfigViewSet,  # ViewSet для настроек системы
+    UserRegistrationView,  # View для регистрации пользователя
+    LoginView,  # View для входа пользователя
+    LogoutView,  # View для выхода пользователя
+    RefreshTokenView,  # View для обновления JWT токена
+    CurrentUserView,  # View для получения данных текущего пользователя
+    LiveAttacksView,  # View для потоковой передачи атак в реальном времени
+    GeoLocationView,  # View для получения геолокации по IP
+    DashboardStatsView,  # View для статистики дашборда
+)
 
 # Создаем роутер для автоматической регистрации ViewSet
 router = DefaultRouter()
 
-# Регистрируем ViewSet в роутере
-# router.register создаст следующие URL:
-# /api/attacks/ - список и создание атак
-# /api/attacks/{id}/ - детали, обновление, удаление конкретной атаки
-router.register(r'attacks', views.CyberAttackViewSet, basename='attack')
+# Регистрируем ViewSet с соответствующими basename
+router.register(r'attacks', CyberAttackViewSet, basename='attack')  # /api/attacks/
+router.register(r'statistics', AttackStatisticsViewSet, basename='statistics')  # /api/statistics/
+router.register(r'config', SystemConfigViewSet, basename='config')  # /api/config/
 
-# Регистрируем статистику атак (только чтение)
-# /api/statistics/ - список статистики
-# /api/statistics/{id}/ - детали конкретной записи статистики
-router.register(r'statistics', views.AttackStatisticsViewSet, basename='statistics')
-
-# Регистрируем системную конфигурацию
-# /api/config/ - список настроек
-# /api/config/{id}/ - детали конкретной настройки
-router.register(r'config', views.SystemConfigViewSet, basename='config')
-
-# Определяем urlpatterns - список всех URL паттернов приложения
+# Основные URL паттерны API
 urlpatterns = [
-    # Включаем URL созданные роутером для ViewSet
+    # Включаем автоматически сгенерированные роутером URL
     path('', include(router.urls)),
     
-    # URL для аутентификации пользователя
-    path('auth/login/', views.login_view, name='login'),  # Вход пользователя
-    path('auth/logout/', views.logout_view, name='logout'),  # Выход пользователя
-    path('auth/register/', views.register_view, name='register'),  # Регистрация нового пользователя
+    # Эндпоинты аутентификации
+    path('auth/register/', UserRegistrationView.as_view(), name='auth-register'),  # POST /api/auth/register/ - регистрация
+    path('auth/login/', LoginView.as_view(), name='auth-login'),  # POST /api/auth/login/ - вход
+    path('auth/logout/', LogoutView.as_view(), name='auth-logout'),  # POST /api/auth/logout/ - выход
+    path('auth/refresh/', RefreshTokenView.as_view(), name='auth-refresh'),  # POST /api/auth/refresh/ - обновление токена
+    path('auth/me/', CurrentUserView.as_view(), name='auth-me'),  # GET /api/auth/me/ - текущий пользователь
     
-    # URL для получения статистики дашборда
-    path('dashboard/stats/', views.dashboard_stats_view, name='dashboard-stats'),  # Общая статистика
-    
-    # URL для получения данных в реальном времени
-    path('attacks/live/', views.live_attacks_view, name='live-attacks'),  # Последние атаки
-    
-    # URL для получения геоданных об атаках
-    path('attacks/geo/', views.geo_attacks_view, name='geo-attacks'),  # Геоданные атак
+    # Дополнительные эндпоинты
+    path('live/', LiveAttacksView.as_view(), name='live-attacks'),  # GET /api/live/ - атаки в реальном времени
+    path('geo/', GeoLocationView.as_view(), name='geo-location'),  # GET /api/geo/?ip=x.x.x.x - геолокация
+    path('dashboard/', DashboardStatsView.as_view(), name='dashboard-stats'),  # GET /api/dashboard/ - статистика дашборда
 ]

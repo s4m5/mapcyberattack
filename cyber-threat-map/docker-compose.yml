@@ -1,153 +1,214 @@
-# Docker Compose конфигурация для проекта Интерактивная Карта Киберугроз
-# Определяет все сервисы необходимые для работы приложения
+# Docker Compose конфигурация для развертывания Карты Киберугроз
+# Определяет все сервисы: PostgreSQL, Redis, Backend, Frontend, Celery
 
 version: '3.8'  # Версия формата Docker Compose
 
+# Определение сетей для изоляции сервисов
+networks:
+  cyber_threat_network:  # Основная сеть для всех сервисов
+    driver: bridge  # Тип сети - bridge (мост)
+
+# Определение томов для постоянного хранения данных
+volumes:
+  postgres_data:  # Том для данных PostgreSQL
+    driver: local  # Локальный драйвер хранения
+  redis_data:  # Том для данных Redis
+    driver: local
+
+# Определение сервисов (контейнеров)
 services:
   # Сервис базы данных PostgreSQL
   db:
-    image: postgres:15-alpine  # Образ PostgreSQL версии 15 (легковесный Alpine)
-    container_name: cyber_db  # Имя контейнера
-    restart: unless-stopped  # Автоматический перезапуск если контейнер остановлен не пользователем
-    environment:  # Переменные окружения для PostgreSQL
-      POSTGRES_DB: cyber_threat_map  # Имя базы данных
-      POSTGRES_USER: cyber_user  # Имя пользователя БД
-      POSTGRES_PASSWORD: secure_password_change_me  # Пароль БД (измените в продакшене!)
-    volumes:  # Том для сохранения данных БД
-      - postgres_data:/var/lib/postgresql/data  # Сохранение данных между перезапусками
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
-    healthcheck:  # Проверка работоспособности БД
-      test: ["CMD-SHELL", "pg_isready -U cyber_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    image: postgres:15-alpine  # Образ PostgreSQL 15 (Alpine для минимального размера)
+    container_name: cyber_threat_db  # Имя контейнера
+    restart: unless-stopped  # Автоматический перезапуск если контейнер упал (кроме ручной остановки)
+    
+    # Переменные окружения для настройки PostgreSQL
+    environment:
+      POSTGRES_DB: cyber_threat_db  # Имя базы данных
+      POSTGRES_USER: cyber_user  # Пользователь БД
+      POSTGRES_PASSWORD: cyber_secure_password_2024  # Пароль БД (изменить в продакшене!)
+      PGDATA: /var/lib/postgresql/data/pgdata  # Путь к данным
+    
+    # Маппинг портов: хост:контейнер
+    ports:
+      - "5432:5432"  # Доступ к PostgreSQL с хоста (опционально для отладки)
+    
+    # Монтирование томов для сохранения данных
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Постоянное хранение данных БД
+    
+    # Подключение к сети
+    networks:
+      - cyber_threat_network
+    
+    # Проверка здоровья контейнера
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyber_user -d cyber_threat_db"]  # Команда проверки
+      interval: 10s  # Интервал между проверками
+      timeout: 5s  # Таймаут проверки
+      retries: 5  # Количество попыток перед признанием нездоровым
 
-  # Сервис Redis для кэширования и WebSocket каналов
+  # Сервис кэша и брокера сообщений Redis
   redis:
-    image: redis:7-alpine  # Образ Redis версии 7 (легковесный Alpine)
-    container_name: cyber_redis  # Имя контейнера
+    image: redis:7-alpine  # Образ Redis 7 (Alpine версия)
+    container_name: cyber_threat_redis  # Имя контейнера
     restart: unless-stopped  # Автоматический перезапуск
-    command: redis-server --appendonly yes  # Запуск с сохранением на диск (AOF)
-    volumes:  # Том для сохранения данных Redis
-      - redis_data:/data
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
-    healthcheck:  # Проверка работоспособности Redis
-      test: ["CMD", "redis-cli", "ping"]
+    
+    # Порт Redis
+    ports:
+      - "6379:6379"  # Доступ к Redis с хоста
+    
+    # Том для persistence (опционально)
+    volumes:
+      - redis_data:/data  # Сохранение данных Redis
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Проверка здоровья
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]  # Проверка через redis-cli ping
       interval: 10s
       timeout: 5s
       retries: 5
 
   # Сервис бэкенда Django
   backend:
-    build:  # Настройки сборки образа
-      context: ./backend  # Контекст сборки (директория с Dockerfile)
+    build:
+      context: ./backend  # Путь к директории с Dockerfile бэкенда
       dockerfile: Dockerfile  # Имя файла Dockerfile
-    container_name: cyber_backend  # Имя контейнера
+    container_name: cyber_threat_backend  # Имя контейнера
     restart: unless-stopped  # Автоматический перезапуск
-    depends_on:  # Зависимости от других сервисов
-      db:  # База данных должна быть запущена
-        condition: service_healthy  # Ждем пока БД станет здоровой
-      redis:  # Redis должен быть запущен
-        condition: service_healthy  # Ждем пока Redis станет здоровым
-    environment:  # Переменные окружения для Django
-      DEBUG: "False"  # Режим отладки выключен (в продакшене)
-      DJANGO_SETTINGS_MODULE: cyber_threat_map.settings  # Файл настроек Django
-      DB_NAME: cyber_threat_map  # Имя базы данных
-      DB_USER: cyber_user  # Пользователь БД
-      DB_PASSWORD: secure_password_change_me  # Пароль БД
-      DB_HOST: db  # Хост БД (имя сервиса Docker)
-      DB_PORT: 5432  # Порт БД
-      REDIS_URL: redis://redis:6379/0  # URL подключения к Redis
-      SECRET_KEY: change-me-in-production-secure-random-key  # Секретный ключ Django (измените!)
-      ALLOWED_HOSTS: "*"  # Разрешенные хосты (настройте для продакшена)
-    volumes:  # Том для монтирования кода (для разработки)
-      - ./backend:/app  # Монтируем исходный код в контейнер
-      - backend_staticfiles:/app/staticfiles  # Том для статических файлов
-      - backend_logs:/app/logs  # Том для логов приложения
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
-    command: >  # Команда запуска (переопределяет CMD из Dockerfile)
+    
+    # Переменные окружения для Django
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz  # Секретный ключ Django
+      DJANGO_DEBUG: "True"  # Режим отладки (False в продакшене!)
+      DJANGO_ALLOWED_HOSTS: "*"  # Разрешенные хосты
+      
+      # Настройки подключения к БД (должны совпадать с сервисом db)
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db  # Имя сервиса db в Docker сети
+      POSTGRES_PORT: 5432
+      
+      # Настройки Redis
+      REDIS_URL: redis://redis:6379/0  # URL для подключения к Redis
+    
+    # Зависимости от других сервисов
+    depends_on:
+      db:
+        condition: service_healthy  # Ждем пока БД будет готова
+      redis:
+        condition: service_healthy  # Ждем пока Redis будет готов
+    
+    # Порты бэкенда
+    ports:
+      - "8000:8000"  # Django сервер на порту 8000
+    
+    # Монтирование кода для разработки (опционально)
+    volumes:
+      - ./backend:/app  # Синхронизация кода с контейнером (для разработки)
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска (переопределяет CMD из Dockerfile)
+    command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             gunicorn --workers 3 --bind 0.0.0.0:8000 cyber_threat_map.wsgi:application"
-    expose:  # Порты доступные внутри сети Docker
-      - "8000"
+             gunicorn --bind 0.0.0.0:8000 --workers 4 cyber_threat_map.wsgi:application"
 
-  # Сервис мониторинга логов (парсер syslog)
-  log_monitor:
-    build:  # Настройки сборки образа
-      context: ./backend  # Контекст сборки
-      dockerfile: Dockerfile  # Файл Dockerfile
-    container_name: cyber_log_monitor  # Имя контейнера
-    restart: unless-stopped  # Автоматический перезапуск
-    depends_on:  # Зависимости от других сервисов
-      - backend  # Бэкенд должен быть запущен
-    environment:  # Переменные окружения
-      DJANGO_SETTINGS_MODULE: cyber_threat_map.settings  # Настройки Django
-      SYSLOG_FILE: /var/log/syslog  # Путь к syslog (монтируется через volume)
-      POLL_INTERVAL: "5"  # Интервал опроса логов в секундах
-    volumes:  # Том для доступа к системным логам
-      - /var/log:/host_logs:ro  # Монтируем системные логи только для чтения
-      - ./backend:/app  # Монтируем код приложения
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
-    command: >  # Команда запуска монитора логов
-      sh -c "python manage.py run_monitor"
-    privileged: true  # Привилегированный режим для доступа к логам
-
-  # Сервис фронтенда React (Nginx для раздачи статики)
+  # Сервис фронтенда React + Nginx
   frontend:
-    build:  # Настройки сборки образа
-      context: ./frontend  # Контекст сборки (директория фронтенда)
-      dockerfile: Dockerfile  # Файл Dockerfile
-      args:  # Аргументы сборки
-        REACT_APP_API_URL: http://localhost:8000/api  # URL API для фронтенда
-    container_name: cyber_frontend  # Имя контейнера
+    build:
+      context: ./frontend  # Путь к директории с Dockerfile фронтенда
+      dockerfile: Dockerfile
+    container_name: cyber_threat_frontend  # Имя контейнера
     restart: unless-stopped  # Автоматический перезапуск
-    depends_on:  # Зависимости от других сервисов
-      - backend  # Бэкенд должен быть запущен
-    ports:  # Публикуемые порты (хост:контейнер)
-      - "80:80"  # Порт 80 на хосте -> порт 80 в контейнере
-      - "443:443"  # Порт 443 для HTTPS (если настроен)
-    volumes:  # Том для конфигурации Nginx
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro  # Конфигурация Nginx
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
+    
+    # Зависимость от бэкенда
+    depends_on:
+      - backend
+    
+    # Порты фронтенда
+    ports:
+      - "80:80"  # Nginx на порту 80 (основной HTTP порт)
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
 
   # Сервис Celery для фоновых задач
-  celery_worker:
-    build:  # Настройки сборки образа
-      context: ./backend  # Контекст сборки
-      dockerfile: Dockerfile  # Файл Dockerfile
-    container_name: cyber_celery  # Имя контейнера
-    restart: unless-stopped  # Автоматический перезапуск
-    depends_on:  # Зависимости от других сервисов
-      - redis  # Redis должен быть запущен
-      - db  # БД должна быть запущена
-    environment:  # Переменные окружения
-      DJANGO_SETTINGS_MODULE: cyber_threat_map.settings  # Настройки Django
-      REDIS_URL: redis://redis:6379/0  # URL подключения к Redis
-    volumes:  # Том для монтирования кода
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_threat_celery  # Имя контейнера
+    restart: unless-stopped
+    
+    # Те же переменные окружения что и у бэкенда
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    
+    # Зависимости
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска Celery worker
+    command: >
+      sh -c "celery -A cyber_threat_map worker --loglevel=info --pool=solo"
+    
+    # Том для кода
+    volumes:
       - ./backend:/app
-    networks:  # Сеть для связи с другими сервисами
-      - cyber_network
-    command: >  # Команда запуска Celery worker
-      sh -c "celery -A cyber_threat_map worker --loglevel=info"
 
-# Определение сетей
-networks:
-  cyber_network:  # Сеть для связи всех сервисов
-    driver: bridge  # Тип сети - мост (bridge)
-
-# Определение томов для сохранения данных
-volumes:
-  postgres_data:  # Том для данных PostgreSQL
-    driver: local  # Локальный драйвер хранения
-  redis_data:  # Том для данных Redis
-    driver: local  # Локальный драйвер хранения
-  backend_staticfiles:  # Том для статических файлов Django
-    driver: local  # Локальный драйвер хранения
-  backend_logs:  # Том для логов приложения
-    driver: local  # Локальный драйвер хранения
+  # Сервис Celery Beat для периодических задач
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber_threat_celery_beat
+    restart: unless-stopped
+    
+    # Переменные окружения
+    environment:
+      DJANGO_SECRET_KEY: django-insecure-change-this-in-production-abc123xyz
+      POSTGRES_DB: cyber_threat_db
+      POSTGRES_USER: cyber_user
+      POSTGRES_PASSWORD: cyber_secure_password_2024
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    
+    # Зависимости
+    depends_on:
+      - redis
+      - db
+    
+    # Сеть
+    networks:
+      - cyber_threat_network
+    
+    # Команда запуска Celery Beat
+    command: >
+      sh -c "celery -A cyber_threat_map beat --loglevel=info"

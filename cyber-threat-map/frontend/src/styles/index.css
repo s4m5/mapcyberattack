@@ -1,0 +1,193 @@
+/*
+ * Глобальные стили приложения Карта Киберугроз
+ * Использует Tailwind CSS для утилитарных классов
+ */
+
+@tailwind base;      /* Подключение базовых стилей Tailwind */
+@tailwind components;/* Подключение компонентных стилей Tailwind */
+@tailwind utilities; /* Подключение утилитарных классов Tailwind */
+
+/* Базовые стили для body */
+body {
+  margin: 0;                    /* Убираем стандартные отступы */
+  font-family: -apple-system,   /* Системный шрифт Apple */
+    BlinkMacSystemFont,         /* Системный шрифт Chrome */
+    'Segoe UI',                 /* Шрифт Windows */
+    'Roboto',                   /* Шрифт Google */
+    'Oxygen',                   /* Шрифт KDE */
+    'Ubuntu',                   /* Шрифт Ubuntu */
+    'Cantarell',                /* Шрифт GNOME */
+    'Fira Sans',                /* Шрифт Mozilla */
+    'Droid Sans',               /* Шрифт Android */
+    'Helvetica Neue',           /* Классический шрифт */
+    sans-serif;                 /* Резервный шрифт без засечек */
+  -webkit-font-smoothing: antialiased;  /* Сглаживание шрифтов в WebKit */
+  -moz-osx-font-smoothing: grayscale;   /* Сглаживание шрифтов в Firefox */
+  background-color: #111827;    /* Темный фон (gray-900) */
+  color: #f3f4f6;               /* Светлый текст (gray-100) */
+}
+
+/* Стили для кода */
+code {
+  font-family: source-code-pro,   /* Моноширинный шрифт для кода */
+    Menlo,                        /* Системный моноширинный macOS */
+    Monaco,                       /* Системный моноширинный */
+    'Courier New',                /* Классический моноширинный */
+    monospace;                    /* Резервный моноширинный шрифт */
+}
+
+/* Скроллбар в стиле hi-tech */
+::-webkit-scrollbar {
+  width: 8px;                     /* Ширина вертикального скроллбара */
+  height: 8px;                    /* Высота горизонтального скроллбара */
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;            /* Цвет трека (gray-800) */
+  border-radius: 4px;             /* Закругление трека */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;            /* Цвет ползунка (gray-600) */
+  border-radius: 4px;             /* Закругление ползунка */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;            /* Цвет ползунка при наведении (gray-500) */
+}
+
+/* Анимация пульсации для индикаторов */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 20px currentColor;
+    opacity: 0.7;
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Анимация сканирования для глобуса */
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.scan-line {
+  animation: scan 3s linear infinite;
+}
+
+/* Контейнер приложения */
+.app-container {
+  min-height: 100vh;              /* Минимальная высота - весь экран */
+  display: flex;                  /* Flexbox для layout */
+  flex-direction: column;         /* Вертикальное направление */
+}
+
+/* Стили для ссылок */
+a {
+  text-decoration: none;          /* Убираем подчеркивание */
+  transition: color 0.2s ease;    /* Плавный переход цвета */
+}
+
+/* Стили для кнопок */
+button {
+  cursor: pointer;                /* Курсор-рука при наведении */
+  transition: all 0.2s ease;      /* Плавный переход всех свойств */
+}
+
+button:disabled {
+  cursor: not-allowed;            /* Курсор-запрет для disabled кнопок */
+  opacity: 0.5;                   /* Полупрозрачность */
+}
+
+/* Стили для input элементов */
+input, select, textarea {
+  transition: border-color 0.2s ease, 
+              box-shadow 0.2s ease;  /* Плавный переход рамки и тени */
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;                  /* Убираем стандартную обводку */
+}
+
+/* Glassmorphism эффект */
+.glass {
+  background: rgba(31, 41, 55, 0.7);    /* Полупрозрачный фон (gray-800) */
+  backdrop-filter: blur(10px);          /* Размытие фона */
+  -webkit-backdrop-filter: blur(10px);  /* Размытие для Safari */
+  border: 1px solid rgba(75, 85, 99, 0.4);  /* Полупрозрачная рамка */
+}
+
+/* Hi-Tech границы со свечением */
+.hitech-border {
+  position: relative;
+  border: 1px solid #06b6d4;      /* Cyan граница */
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);  /* Свечение */
+}
+
+.hitech-border::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  background: linear-gradient(45deg, 
+    #06b6d4,                      /* Cyan */
+    transparent 25%, 
+    transparent 75%, 
+    #06b6d4                       /* Cyan */
+  );
+  background-size: 200% 200%;
+  animation: border-flow 3s linear infinite;
+  z-index: -1;
+  border-radius: inherit;
+}
+
+@keyframes border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+/* Утилитарные классы для анимаций */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

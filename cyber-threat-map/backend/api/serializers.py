@@ -1,195 +1,271 @@
 """
-Сериализаторы для преобразования моделей Django в JSON и обратно.
-Используется Django REST Framework для API эндпоинтов.
+Сериализаторы Django REST Framework для приложения карты киберугроз.
+Преобразуют модели данных в JSON формат и обратно.
 """
 
-from rest_framework import serializers  # Импортируем сериализаторы DRF
-from django.contrib.auth import get_user_model  # Функция для получения модели пользователя
-from .models import CyberAttack, AttackStatistics, SystemConfig  # Импортируем модели
-
-# Получаем модель пользователя (может быть кастомной)
-User = get_user_model()
+from rest_framework import serializers  # Импорт сериализаторов DRF
+from api.models import User, CyberAttack, AttackStatistics, SystemConfig  # Импорт моделей
+from django.contrib.auth import get_user_model  # Функция получения модели пользователя
 
 
 class UserSerializer(serializers.ModelSerializer):
     """
     Сериализатор для модели пользователя.
-    Преобразует данные пользователя в JSON формат для API.
+    Используется для регистрации, просмотра и обновления пользователей.
     """
     
-    # Поле для подтверждения пароля (не сохраняется в БД)
-    password_confirm = serializers.CharField(write_only=True, required=False)  # Только для записи
-    
     class Meta:
-        """Мета-настройки сериализатора."""
-        model = User  # Модель для сериализации
-        fields = [  # Поля которые будут включены в сериализацию
-            'id',  # Уникальный идентификатор
-            'username',  # Имя пользователя
+        """Мета-настройки сериализатора User."""
+        model = User  # Модель которую сериализуем
+        fields = [
+            'id',  # Уникальный идентификатор пользователя
+            'username',  # Имя пользователя (логин)
             'email',  # Email адрес
             'first_name',  # Имя
             'last_name',  # Фамилия
             'is_active',  # Статус активности
             'created_at',  # Дата создания
             'updated_at',  # Дата обновления
-            'password',  # Пароль (только для записи)
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']  # Поля только для чтения
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для регистрации нового пользователя.
+    Включает поля для пароля с дополнительной валидацией.
+    """
+    password = serializers.CharField(
+        write_only=True,  # Поле только для записи (не возвращается в ответах)
+        required=True,  # Обязательное поле
+        style={'input_type': 'password'},  # Тип ввода пароль
+        help_text='Пароль должен содержать минимум 8 символов'  # Подсказка для пользователя
+    )
+    password_confirm = serializers.CharField(
+        write_only=True,  # Поле только для записи
+        required=True,  # Обязательное поле
+        style={'input_type': 'password'},  # Тип ввода пароль
+        help_text='Подтверждение пароля'  # Подсказка
+    )
+
+    class Meta:
+        """Мета-настройки сериализатора регистрации."""
+        model = User  # Модель пользователя
+        fields = [
+            'username',  # Имя пользователя
+            'email',  # Email
+            'password',  # Пароль
             'password_confirm',  # Подтверждение пароля
         ]
-        extra_kwargs = {  # Дополнительные настройки для полей
-            'password': {'write_only': True},  # Пароль только для записи (не возвращается в ответах)
-            'created_at': {'read_only': True},  # Дата создания только для чтения
-            'updated_at': {'read_only': True},  # Дата обновления только для чтения
-        }
-    
-    def validate(self, data):
+
+    def validate_password(self, value):
         """
-        Валидация данных пользователя.
-        Проверяет совпадение паролей при создании пользователя.
+        Валидация пароля: проверка минимальной длины.
         
         Args:
-            data: Словарь с данными пользователя
+            value: Значение пароля
             
         Returns:
-            Проверенные данные или ошибка валидации
+            Проверенный пароль
+            
+        Raises:
+            serializers.ValidationError: Если пароль слишком короткий
         """
-        # Проверяем совпадение паролей если они указаны
-        if data.get('password') and data.get('password_confirm'):
-            if data['password'] != data['password_confirm']:
-                raise serializers.ValidationError({"password": "Пароли не совпадают"})  # Ошибка если пароли разные
-        return data  # Возвращаем проверенные данные
-    
-    def create(self, validated_data):
+        if len(value) < 8:
+            raise serializers.ValidationError('Пароль должен содержать минимум 8 символов')
+        return value
+
+    def validate(self, data):
         """
-        Создание нового пользователя.
-        Хэширует пароль перед сохранением в базу данных.
+        Общая валидация данных: проверка совпадения паролей.
         
         Args:
-            validated_data: Проверенные данные пользователя
+            data: Словарь с данными формы
+            
+        Returns:
+            Проверенные данные
+            
+        Raises:
+            serializers.ValidationError: Если пароли не совпадают
+        """
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError({'password_confirm': 'Пароли не совпадают'})
+        return data
+
+    def create(self, validated_data):
+        """
+        Создание нового пользователя с хешированием пароля.
+        
+        Args:
+            validated_data: Проверенные данные без password_confirm
             
         Returns:
             Созданный объект пользователя
         """
-        # Извлекаем подтверждение пароля из данных (не нужно для создания)
-        validated_data.pop('password_confirm', None)
+        # Удаляем поле подтверждения пароля из данных
+        validated_data.pop('password_confirm')
         
-        # Создаем пользователя с хэшированным паролем
+        # Создаем пользователя с хешированным паролем
         user = User.objects.create_user(
-            username=validated_data['username'],  # Имя пользователя
-            email=validated_data.get('email', ''),  # Email
-            password=validated_data['password'],  # Пароль (автоматически хэшируется)
-            first_name=validated_data.get('first_name', ''),  # Имя
-            last_name=validated_data.get('last_name', ''),  # Фамилия
-            is_active=validated_data.get('is_active', True),  # Активность
+            username=validated_data['username'],
+            email=validated_data.get('email'),
+            password=validated_data['password']
         )
-        return user  # Возвращаем созданного пользователя
+        return user
 
 
 class CyberAttackSerializer(serializers.ModelSerializer):
     """
     Сериализатор для модели кибератаки.
-    Преобразует данные об атаке в JSON формат для API.
+    Преобразует данные атаки в JSON формат для API.
     """
-    
-    # Поле для цвета протокола (вычисляемое, только для чтения)
-    protocol_color = serializers.SerializerMethodField(read_only=True)  # Вычисляемое поле
-    
+    severity_display = serializers.SerializerMethodField()  # Поле для отображения уровня опасности
+    firewall_action_display = serializers.SerializerMethodField()  # Поле для отображения действия фаервола
+
     class Meta:
-        """Мета-настройки сериализатора."""
-        model = CyberAttack  # Модель для сериализации
-        fields = '__all__'  # Все поля модели будут включены
-    
-    def get_protocol_color(self, obj):
+        """Мета-настройки сериализатора CyberAttack."""
+        model = CyberAttack  # Модель которую сериализуем
+        fields = [
+            'id',  # Уникальный идентификатор атаки
+            'source_ip',  # IP адрес источника
+            'target_ip',  # IP адрес цели
+            'source_port',  # Порт источника
+            'target_port',  # Порт цели
+            'protocol',  # Протокол
+            'attack_type',  # Тип атаки
+            'vulnerability_type',  # Тип уязвимости
+            'country',  # Страна
+            'city',  # Город
+            'latitude',  # Широта
+            'longitude',  # Долгота
+            'timestamp',  # Время атаки
+            'severity',  # Уровень опасности (код)
+            'severity_display',  # Уровень опасности (текст)
+            'firewall_action',  # Действие фаервола (код)
+            'firewall_action_display',  # Действие фаервола (текст)
+            'raw_log',  # Исходный лог
+            'created_at',  # Дата создания записи
+            'updated_at',  # Дата обновления записи
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']  # Поля только для чтения
+
+    def get_severity_display(self, obj):
         """
-        Возвращает цвет для протокола атаки.
-        Используется для визуализации на карте.
+        Получение человекочитаемого названия уровня опасности.
         
         Args:
-            obj: Объект кибератаки
+            obj: Объект CyberAttack
             
         Returns:
-            HEX код цвета для данного протокола
+            Текстовое представление уровня опасности
         """
-        # Словарь цветов для различных протоколов
-        colors = {
-            'TCP': '#00ff00',  # Зеленый для TCP
-            'UDP': '#0000ff',  # Синий для UDP
-            'ICMP': '#ff0000',  # Красный для ICMP
-            'HTTP': '#ffff00',  # Желтый для HTTP
-            'HTTPS': '#00ffff',  # Голубой для HTTPS
-            'SSH': '#ff00ff',  # Маджента для SSH
-            'FTP': '#ffa500',  # Оранжевый для FTP
-            'DNS': '#800080',  # Фиолетовый для DNS
-        }
-        # Возвращаем цвет или белый по умолчанию
-        return colors.get(obj.protocol.upper(), '#ffffff')
+        severity_choices = dict(CyberAttack._meta.get_field('severity').choices)
+        return severity_choices.get(obj.severity, obj.severity)
+
+    def get_firewall_action_display(self, obj):
+        """
+        Получение человекочитаемого названия действия фаервола.
+        
+        Args:
+            obj: Объект CyberAttack
+            
+        Returns:
+            Текстовое представление действия фаервола
+        """
+        action_choices = dict(CyberAttack._meta.get_field('firewall_action').choices)
+        return action_choices.get(obj.firewall_action, obj.firewall_action)
 
 
 class AttackStatisticsSerializer(serializers.ModelSerializer):
     """
     Сериализатор для модели статистики атак.
-    Преобразует агрегированные данные статистики в JSON формат.
+    Возвращает агрегированные данные за период.
     """
-    
     class Meta:
-        """Мета-настройки сериализатора."""
-        model = AttackStatistics  # Модель для сериализации
-        fields = '__all__'  # Все поля модели будут включены
+        """Мета-настройки сериализатора AttackStatistics."""
+        model = AttackStatistics  # Модель которую сериализуем
+        fields = [
+            'id',  # Уникальный идентификатор
+            'date',  # Дата статистики
+            'top_attack_types',  # Топ типов атак
+            'top_vulnerabilities',  # Топ уязвимостей
+            'top_ports',  # Топ портов
+            'top_countries',  # Топ стран
+            'total_attacks',  # Всего атак
+            'unique_sources',  # Уникальных источников
+            'created_at',  # Дата создания
+            'updated_at',  # Дата обновления
+        ]
+        read_only_fields = fields  # Все поля только для чтения
 
 
 class SystemConfigSerializer(serializers.ModelSerializer):
     """
-    Сериализатор для модели системной конфигурации.
-    Позволяет управлять настройками системы через API.
+    Сериализатор для модели системных настроек.
+    Позволяет управлять конфигурацией через API.
     """
-    
     class Meta:
-        """Мета-настройки сериализатора."""
-        model = SystemConfig  # Модель для сериализации
-        fields = '__all__'  # Все поля модели будут включены
+        """Мета-настройки сериализатора SystemConfig."""
+        model = SystemConfig  # Модель которую сериализуем
+        fields = [
+            'id',  # Уникальный идентификатор
+            'key',  # Ключ настройки
+            'value',  # Значение настройки
+            'description',  # Описание
+            'updated_at',  # Дата обновления
+        ]
+        read_only_fields = ['id', 'updated_at']  # Поля только для чтения
 
 
 class LoginSerializer(serializers.Serializer):
     """
     Сериализатор для входа пользователя.
-    Принимает username и пароль для аутентификации.
+    Принимает username/email и пароль, возвращает JWT токены.
     """
-    
-    username = serializers.CharField(required=True)  # Имя пользователя (обязательное поле)
-    password = serializers.CharField(required=True, write_only=True)  # Пароль (обязательное, только для записи)
+    username = serializers.CharField(required=False, allow_blank=True)  # Имя пользователя (необязательно)
+    email = serializers.EmailField(required=False, allow_blank=True)  # Email (необязательно)
+    password = serializers.CharField(write_only=True, required=True)  # Пароль (обязательно)
 
-
-class RegisterSerializer(serializers.Serializer):
-    """
-    Сериализатор для регистрации нового пользователя.
-    Принимает данные для создания новой учетной записи.
-    """
-    
-    username = serializers.CharField(required=True)  # Имя пользователя (обязательное)
-    email = serializers.EmailField(required=True)  # Email (обязательное)
-    password = serializers.CharField(required=True, write_only=True)  # Пароль (обязательное, только для записи)
-    password_confirm = serializers.CharField(required=True, write_only=True)  # Подтверждение пароля (обязательное)
-    
     def validate(self, data):
         """
-        Валидация данных регистрации.
-        Проверяет совпадение паролей и уникальность username/email.
+        Валидация учетных данных пользователя.
         
         Args:
-            data: Словарь с данными регистрации
+            data: Словарь с username/email и password
             
         Returns:
-            Проверенные данные или ошибка валидации
+            Данные с добавленным пользователем
+            
+        Raises:
+            serializers.ValidationError: Если credentials неверны
         """
-        # Проверяем совпадение паролей
-        if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError({"password_confirm": "Пароли не совпадают"})
+        from django.contrib.auth import authenticate  # Импорт функции аутентификации
         
-        # Проверяем уникальность username
-        if User.objects.filter(username=data['username']).exists():
-            raise serializers.ValidationError({"username": "Пользователь с таким именем уже существует"})
+        # Определяем поле для аутентификации (username или email)
+        username = data.get('username')
+        email = data.get('email')
         
-        # Проверяем уникальность email
-        if User.objects.filter(email=data['email']).exists():
-            raise serializers.ValidationError({"email": "Email уже зарегистрирован"})
+        if not username and not email:
+            raise serializers.ValidationError('Необходимо указать username или email')
         
-        return data  # Возвращаем проверенные данные
+        # Если указан email, используем его для поиска пользователя
+        if email:
+            User = get_user_model()
+            try:
+                user = User.objects.get(email=email)
+                username = user.username
+            except User.DoesNotExist:
+                raise serializers.ValidationError('Неверный email или пароль')
+        
+        # Аутентифицируем пользователя
+        user = authenticate(username=username, password=data['password'])
+        
+        if not user:
+            raise serializers.ValidationError('Неверное имя пользователя или пароль')
+        
+        if not user.is_active:
+            raise serializers.ValidationError('Учетная запись deactivated')
+        
+        # Добавляем пользователя в данные для использования во view
+        data['user'] = user
+        return data

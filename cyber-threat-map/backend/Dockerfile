@@ -1,73 +1,49 @@
-# Dockerfile для бэкенда Django проекта Интерактивная Карта Киберугроз
-# Определяет среду выполнения для Python приложения
+# Docker образ для бэкенда Django приложения Карты Киберугроз
+# Использует Python 3.11 в качестве базового образа
 
-# Базовый образ Python 3.11 (легковесный Alpine Linux)
-FROM python:3.11-slim
+FROM python:3.11-slim  # Базовый образ с Python 3.11 (slim версия для уменьшения размера)
 
-# Метаданные образа
-LABEL maintainer="Cyber Threat Map Team"
-LABEL description="Django backend for Interactive Cyber Threat Map"
-LABEL version="1.0.0"
-
-# Переменные окружения для Python
-# PYTHONUNBUFFERED - отключает буферизацию вывода (важно для логирования в Docker)
-ENV PYTHONUNBUFFERED=1
-
-# PYTHONDONTWRITEBYTECODE - предотвращает создание .pyc файлов
+# Устанавливаем переменную окружения для предотвращения создания .pyc файлов
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# PIP_NO_CACHE_DIR - отключает кэш pip для уменьшения размера образа
-ENV PIP_NO_CACHE_DIR=1
+# Устанавливаем переменную окружения для буферизации вывода Python (важно для логирования в Docker)
+ENV PYTHONUNBUFFERED=1
 
-# PIP_DISABLE_PIP_VERSION_CHECK - отключает проверку версии pip
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Установка рабочей директории внутри контейнера
+# Создаем директорию для приложения внутри контейнера
 WORKDIR /app
 
-# Установка системных зависимостей необходимых для сборки пакетов
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Библиотеки для компиляции Python пакетов
-    build-essential \
-    # SSL библиотеки для безопасных соединений
-    libssl-dev \
-    # FFI для вызова функций из C кода
-    libffi-dev \
-    # PostgreSQL клиентские библиотеки
-    libpq-dev \
-    # GeoIP библиотеки для определения геолокации по IP
-    libgeoip-dev \
-    geoip-bin \
-    # Утилиты для работы с базой данных
-    postgresql-client \
-    # curl для health checks
-    curl \
-    # Очистка кэша apt для уменьшения размера образа
-    && rm -rf /var/lib/apt/lists/*
+# Устанавливаем системные зависимости необходимые для работы приложения
+RUN apt-get update && apt-get install -y \
+    gcc \  # Компилятор для установки пакетов с C расширениями
+    libpq-dev \  # Библиотеки PostgreSQL для psycopg2
+    curl \  # Утилита для HTTP запросов
+    && rm -rf /var/lib/apt/lists/*  # Очищаем кэш apt для уменьшения размера образа
 
-# Копирование файла зависимостей
-COPY requirements.txt /app/
+# Копируем файл зависимостей в контейнер
+COPY requirements.txt .
 
-# Установка Python зависимостей из requirements.txt
+# Устанавливаем Python зависимости из requirements.txt
+# --no-cache-dir предотвращает кэширование pip для уменьшения размера
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt
 
-# Копирование исходного кода приложения
-COPY . /app/
+# Копируем весь код приложения в контейнер
+COPY . .
 
-# Создание директорий для логов и статических файлов
-RUN mkdir -p /app/logs /app/staticfiles
+# Создаем пользователя для запуска приложения от непривилегированного пользователя
+# Это улучшает безопасность контейнера
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app
 
-# Назначение владельца для директорий
-RUN chown -R root:root /app
+# Переключаемся на созданного пользователя
+USER appuser
 
-# Порт на котором работает Django приложение
+# Открываем порт 8000 для доступа к Django серверу
 EXPOSE 8000
 
-# Health check для проверки работоспособности приложения
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health/ || exit 1
-
-# Команда запуска приложения по умолчанию
-# Переопределяется в docker-compose.yml через command
-CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:8000", "cyber_threat_map.wsgi:application"]
+# Определяем команду для запуска приложения
+# Используем gunicorn как production WSGI сервер
+# --bind 0.0.0.0:8000 - слушать все интерфейсы на порту 8000
+# --workers 4 - запустить 4 worker процесса
+# cyber_threat_map.wsgi:application - точка входа WSGI приложения
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "cyber_threat_map.wsgi:application"]

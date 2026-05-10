@@ -1,20 +1,19 @@
 """
-ASGI конфигурация для проекта карты киберугроз.
-Используется для асинхронных WebSocket соединений и HTTP запросов.
+ASGI конфигурация для Django проекта.
+Точка входа для ASGI-совместимых веб-серверов (Daphne, Uvicorn).
+Поддерживает асинхронные запросы и WebSocket соединения.
 """
 
-import os  # Импортируем модуль для работы с переменными окружения
+import os  # Импорт модуля для работы с переменными окружения
 
-from django.core.asgi import get_asgi_application  # Импортируем функцию для получения ASGI приложения
-
-# Устанавливаем переменную окружения DJANGO_SETTINGS_MODULE
-# Это указывает Django какой файл настроек использовать
+# Устанавливаем переменную окружения с настройками Django
+# Это необходимо для инициализации Django приложения
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cyber_threat_map.settings')
 
-# Получаем стандартное ASGI приложение Django
-# Оно будет обрабатывать HTTP запросы
-application = get_asgi_application()
+# Импортируем ASGI приложение после установки переменной окружения
+# Django не может быть инициализирован без DJANGO_SETTINGS_MODULE
+from django.core.asgi import get_asgi_application
 
-# Примечание:
-# Для поддержки WebSocket необходимо добавить дополнительные middleware
-# и роутинг для channels layers, если требуется реальная WebSocket поддержка
+# Создаем ASGI приложение которое будет обрабатывать асинхронные HTTP запросы
+# application - это callable объект для асинхронных серверов
+application = get_asgi_application()

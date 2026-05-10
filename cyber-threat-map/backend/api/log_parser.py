@@ -3,12 +3,13 @@
 Поддерживает различные форматы логов: syslog, iptables, nftables, ufw.
 """
 
-import re
-import socket
-import logging
-from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
-from pathlib import Path
+import re  # Импорт модуля для регулярных выражений
+import socket  # Импорт модуля для сетевых операций
+import logging  # Импорт модуля для логгирования
+from datetime import datetime  # Импорт класса для работы с датой и временем
+from typing import Optional, Dict, Any, List  # Импорт типов для аннотаций
+from pathlib import Path  # Импорт класса для работы с путями файловой системы
+
 
 # Настройка логгера для модуля парсера
 logger = logging.getLogger(__name__)
@@ -72,23 +73,23 @@ class LogParser:
     
     # Типы атак по сигнатурам в логах
     ATTACK_SIGNATURES = {
-        r'PORTSCAN': 'Port Scan',  # Сканирование портов
-        r'SYN': 'SYN Flood',  # SYN флуд атака
-        r'FIN': 'FIN Scan',  # FIN сканирование
-        r'XMAS': 'XMAS Scan',  # XMAS сканирование
-        r'NULL': 'NULL Scan',  # NULL сканирование
-        r'ACK': 'ACK Scan',  # ACK сканирование
-        r'WINDOW': 'Window Scan',  # Window сканирование
-        r'FRAGMENT': 'Fragment Attack',  # Фрагментация пакетов
-        r'BROADCAST': 'Broadcast Attack',  # Broadcast атака
-        r'MULTICAST': 'Multicast Attack',  # Multicast атака
-        r'LAND': 'LAND Attack',  # LAND атака
-        r'SPOOF': 'Spoofing Attack',  # Спуфинг атака
-        r'DDOS': 'DDoS Attack',  # DDoS атака
-        r'DOS': 'DoS Attack',  # DoS атака
-        r'BRUTE': 'Brute Force',  # Перебор паролей
-        r'INVALID': 'Invalid Packet',  # Неверный пакет
-        r'MALFORMED': 'Malformed Packet',  # Поврежденный пакет
+        r'PORTSCAN': 'Port Scan',
+        r'SYN': 'SYN Flood',
+        r'FIN': 'FIN Scan',
+        r'XMAS': 'XMAS Scan',
+        r'NULL': 'NULL Scan',
+        r'ACK': 'ACK Scan',
+        r'WINDOW': 'Window Scan',
+        r'FRAGMENT': 'Fragment Attack',
+        r'BROADCAST': 'Broadcast Attack',
+        r'MULTICAST': 'Multicast Attack',
+        r'LAND': 'LAND Attack',
+        r'SPOOF': 'Spoofing Attack',
+        r'DDOS': 'DDoS Attack',
+        r'DOS': 'DoS Attack',
+        r'BRUTE': 'Brute Force',
+        r'INVALID': 'Invalid Packet',
+        r'MALFORMED': 'Malformed Packet',
     }
 
     def __init__(self):
@@ -130,7 +131,6 @@ class LogParser:
             return None
         
         # Определяем источник и цель
-        # В логах фаервола обычно первый IP - источник, второй - цель
         source_ip = ip_addresses[0] if ip_addresses else None
         target_ip = ip_addresses[1] if len(ip_addresses) > 1 else self.get_local_ip()
         
@@ -168,7 +168,7 @@ class LogParser:
             'target_port': target_port,
             'protocol': protocol,
             'attack_type': attack_type,
-            'vulnerability_type': '',  # Будет заполнено позже
+            'vulnerability_type': '',
             'firewall_action': firewall_action,
             'severity': severity,
             'timestamp': timestamp,
@@ -185,18 +185,15 @@ class LogParser:
             port: Номер порта
             
         Returns:
-            Название протокола (TCP, UDP, HTTP, HTTPS, SSH, etc.)
+            Название протокола
         """
         if port is None:
-            return 'TCP'  # Протокол по умолчанию
+            return 'TCP'
         
         if port in self.KNOWN_PORTS:
             return self.KNOWN_PORTS[port][0]
         
-        # Стандартные диапазоны портов
-        if port == 53:
-            return 'DNS'
-        elif port in [80, 8080, 8000]:
+        if port in [80, 8080, 8000]:
             return 'HTTP'
         elif port in [443, 8443]:
             return 'HTTPS'
@@ -204,10 +201,8 @@ class LogParser:
             return 'SSH'
         elif port in [20, 21]:
             return 'FTP'
-        elif port < 1024:
-            return 'TCP'  # Привилегированные порты обычно TCP
         else:
-            return 'TCP'  # Протокол по умолчанию
+            return 'TCP'
 
     def detect_attack_type(self, log_line: str) -> str:
         """
@@ -217,7 +212,7 @@ class LogParser:
             log_line: Строка лога для анализа
             
         Returns:
-            Название типа атаки или 'Unknown' если не определено
+            Название типа атаки или 'Unknown'
         """
         for pattern, attack_type in self.attack_patterns.items():
             if pattern.search(log_line):
@@ -227,32 +222,28 @@ class LogParser:
 
     def calculate_severity(self, attack_type: str, firewall_action: str, target_port: Optional[int]) -> str:
         """
-        Вычисляет уровень опасности атаки на основе типа атаки и других факторов.
+        Вычисляет уровень опасности атаки.
         
         Args:
             attack_type: Тип атаки
-            firewall_action: Действие фаервола (DROP, ACCEPT, etc.)
+            firewall_action: Действие фаервола
             target_port: Целевой порт
             
         Returns:
             Уровень опасности: low, medium, high, critical
         """
-        # Критические атаки
         critical_attacks = ['DDoS Attack', 'DoS Attack', 'LAND Attack']
         if any(attack in attack_type for attack in critical_attacks):
             return 'critical'
         
-        # Высокая опасность
         high_attacks = ['Brute Force', 'Spoofing Attack', 'Port Scan']
         if any(attack in attack_type for attack in high_attacks):
             return 'high'
         
-        # Средняя опасность для заблокированных атак на важные порты
         important_ports = [22, 23, 3389, 3306, 5432, 27017, 6379]
         if firewall_action in ['DROP', 'REJECT'] and target_port in important_ports:
             return 'medium'
         
-        # Низкая опасность для остальных случаев
         return 'low'
 
     def extract_timestamp(self, log_line: str) -> datetime:
@@ -263,9 +254,8 @@ class LogParser:
             log_line: Строка лога
             
         Returns:
-            Объект datetime или текущее время если дата не найдена
+            Объект datetime или текущее время
         """
-        # Текущий год для подстановки (syslog не содержит год)
         current_year = datetime.now().year
         
         for regex in self.date_regexes:
@@ -273,11 +263,9 @@ class LogParser:
             if match:
                 date_str = match.group(1)
                 try:
-                    # Пробуем различные форматы даты
                     for fmt in ['%b %d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%b/%Y:%H:%M:%S']:
                         try:
                             dt = datetime.strptime(date_str, fmt)
-                            # Если год не указан, используем текущий
                             if dt.year == 1900:
                                 dt = dt.replace(year=current_year)
                             return dt
@@ -286,7 +274,6 @@ class LogParser:
                 except Exception as e:
                     logger.warning(f"Ошибка при парсинге даты '{date_str}': {e}")
         
-        # Возвращаем текущее время если дата не найдена
         return datetime.now()
 
     @staticmethod
@@ -295,10 +282,9 @@ class LogParser:
         Получает локальный IP адрес сервера.
         
         Returns:
-            Локальный IP адрес или '127.0.0.1' если не удалось определить
+            Локальный IP адрес или '127.0.0.1'
         """
         try:
-            # Создаем сокет для определения внешнего IP
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
@@ -311,7 +297,6 @@ class LogParser:
 class SyslogMonitor:
     """
     Класс для мониторинга syslog файла в реальном времени.
-    Использует polling для отслеживания новых записей в логе.
     """
     
     def __init__(self, log_file_path: str, parser: LogParser):
@@ -324,15 +309,15 @@ class SyslogMonitor:
         """
         self.log_file_path = Path(log_file_path)
         self.parser = parser
-        self.position = 0  # Текущая позиция в файле
-        self.inode = None  # Inode файла для отслеживания ротации
+        self.position = 0
+        self.inode = None
 
     def check_rotation(self) -> bool:
         """
         Проверяет, не была ли повернута файл логов.
         
         Returns:
-            True если файл был повернут, False иначе
+            True если файл был повернут
         """
         try:
             current_inode = self.log_file_path.stat().st_ino
@@ -349,34 +334,28 @@ class SyslogMonitor:
 
     def read_new_lines(self) -> List[Dict[str, Any]]:
         """
-        Читает новые строки из файла лога с последней позиции.
+        Читает новые строки из файла лога.
         
         Returns:
             Список распарсенных записей об атаках
         """
         attacks = []
         
-        # Проверяем существование файла
         if not self.log_file_path.exists():
             logger.warning(f"Файл лога {self.log_file_path} не существует")
             return attacks
         
-        # Проверяем ротацию
         self.check_rotation()
         
         try:
             with open(self.log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                # Переходим к последней известной позиции
                 f.seek(self.position)
                 
-                # Читаем новые строки
                 for line in f:
-                    # Парсим строку
                     parsed = self.parser.parse_line(line)
                     if parsed:
                         attacks.append(parsed)
                 
-                # Сохраняем новую позицию
                 self.position = f.tell()
                 
         except PermissionError:
@@ -398,21 +377,21 @@ def get_protocol_color(protocol: str) -> str:
         HEX код цвета
     """
     colors = {
-        'TCP': '#00ff00',  # Зеленый
-        'UDP': '#0000ff',  # Синий
-        'ICMP': '#ff0000',  # Красный
-        'HTTP': '#ffff00',  # Желтый
-        'HTTPS': '#00ffff',  # Голубой
-        'SSH': '#ff00ff',  # Маджента
-        'FTP': '#ffa500',  # Оранжевый
-        'DNS': '#800080',  # Фиолетовый
-        'SMTP': '#00ff7f',  # Весенне-зеленый
-        'MYSQL': '#ff6347',  # Томатный
-        'POSTGRESQL': '#4169e1',  # Королевский синий
-        'REDIS': '#dc143c',  # Малиновый
-        'MONGODB': '#32cd32',  # Лаймовый
-        'RDP': '#ffd700',  # Золотой
-        'SMB': '#ff4500',  # Оранжево-красный
+        'TCP': '#00ff00',
+        'UDP': '#0000ff',
+        'ICMP': '#ff0000',
+        'HTTP': '#ffff00',
+        'HTTPS': '#00ffff',
+        'SSH': '#ff00ff',
+        'FTP': '#ffa500',
+        'DNS': '#800080',
+        'SMTP': '#00ff7f',
+        'MYSQL': '#ff6347',
+        'POSTGRESQL': '#4169e1',
+        'REDIS': '#dc143c',
+        'MONGODB': '#32cd32',
+        'RDP': '#ffd700',
+        'SMB': '#ff4500',
     }
     
-    return colors.get(protocol.upper(), '#ffffff')  # Белый по умолчанию
+    return colors.get(protocol.upper(), '#ffffff')

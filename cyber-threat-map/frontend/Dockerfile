@@ -1,51 +1,34 @@
 # Dockerfile для фронтенда React приложения
-# Создает образ с собранным React приложением и Nginx для раздачи статики
+# Многоэтапная сборка для минимизации размера образа
 
-# Этап 1: Сборка React приложения
-FROM node:18-alpine AS builder
+# Этап 1: Сборка приложения
+FROM node:20-alpine AS builder  # Используем легкий Alpine образ с Node.js 20
 
-# Установка рабочей директории
-WORKDIR /app
+WORKDIR /app  # Рабочая директория внутри контейнера
 
-# Копирование package файлов для установки зависимостей
-COPY package*.json ./
+# Копируем файлы зависимостей
+COPY package.json package-lock.json* ./
 
-# Установка зависимостей npm
-RUN npm ci --only=production
+# Устанавливаем зависимости (кэшируется если package.json не изменился)
+RUN npm ci --only=production || npm install --only=production
 
-# Копирование исходного кода приложения
+# Копируем исходный код
 COPY . .
 
-# Аргументы сборки для настройки API URL
-ARG REACT_APP_API_URL=http://localhost:8000/api
-ENV REACT_APP_API_URL=$REACT_APP_API_URL
-
-# Сборка React приложения для продакшена
+# Собираем приложение для продакшена
 RUN npm run build
 
-# Этап 2: Финальный образ с Nginx
-FROM nginx:alpine
+# Этап 2: Сервер Nginx для раздачи статики
+FROM nginx:alpine  # Легкий образ Nginx
 
-# Метаданные образа
-LABEL maintainer="Cyber Threat Map Team"
-LABEL description="React frontend for Cyber Threat Map"
-LABEL version="1.0.0"
+# Копируем конфигурацию Nginx
+COPY ../docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Копирование собранного React приложения в директорию Nginx
-COPY --from=builder /app/build /usr/share/nginx/html
+# Копируем собранное приложение из предыдущего этапа
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Копирование конфигурации Nginx (будет переопределено через volume)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Удаление дефолтной конфигурации Nginx
-RUN rm /etc/nginx/conf.d/default.conf
-
-# Порт на котором слушает Nginx
+# Открываем порт 80 для HTTP
 EXPOSE 80
 
-# Health check для проверки работоспособности
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/ || exit 1
-
-# Команда запуска Nginx
+# Запускаем Nginx в foreground режиме
 CMD ["nginx", "-g", "daemon off;"]

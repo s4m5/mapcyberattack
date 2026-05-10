@@ -1,148 +1,263 @@
 #!/bin/bash
-################################################################################
-# Скрипт автоматической установки Интерактивной Карты Киберугроз
-# Поддерживает два режима установки:
-# 1. Без Docker (прямая установка на сервер)
-# 2. С Docker (контейнеризация)
-################################################################################
+# ============================================================================
+# Скрипт автоматической установки и настройки проекта "Карта Киберугроз"
+# Поддерживает два режима: с Docker и без Docker
+# ============================================================================
+
+set -e  # Выход при любой ошибке в скрипте
 
 # Цвета для вывода сообщений
 RED='\033[0;31m'      # Красный цвет для ошибок
 GREEN='\033[0;32m'    # Зеленый цвет для успеха
 YELLOW='\033[1;33m'   # Желтый цвет для предупреждений
 BLUE='\033[0;34m'     # Синий цвет для информации
-NC='\033[0m'          # Сброс цвета
+NC='\033[0m'          # Сброс цвета (Normal Color)
 
-# Переменные конфигурации
-PROJECT_DIR="/opt/cyber-threat-map"     # Директория проекта
-BACKEND_DIR="${PROJECT_DIR}/backend"    # Директория бэкенда
-FRONTEND_DIR="${PROJECT_DIR}/frontend"  # Директория фронтенда
-DB_FILE="${BACKEND_DIR}/db.sqlite3"     # Файл базы данных
-VENV_DIR="${BACKEND_DIR}/venv"          # Виртуальное окружение Python
-ADMIN_USER="admin"                       # Имя пользователя администратора
-ADMIN_EMAIL="admin@localhost"           # Email администратора
-ADMIN_PASS="CyberThreat2024!"           # Пароль администратора (измените!)
+# Пути и переменные
+PROJECT_DIR="/workspace/cyber-threat-map"
+BACKEND_DIR="${PROJECT_DIR}/backend"
+FRONTEND_DIR="${PROJECT_DIR}/frontend"
+LOG_FILE="${PROJECT_DIR}/install.log"
 
-# Функция для вывода цветных сообщений
-print_message() {
-    local color=$1
-    local message=$2
-    echo -e "${color}${message}${NC}"
+# Параметры по умолчанию
+USE_DOCKER=true
+INSTALL_FRONTEND=true
+CREATE_SUPERUSER=true
+ADMIN_USERNAME="admin"
+ADMIN_EMAIL="admin@cybermap.local"
+ADMIN_PASSWORD="CyberThreat2024!"
+
+# ============================================================================
+# Функции для вывода сообщений
+# ============================================================================
+
+log() {
+    # Вывод сообщения с временной меткой в лог файл
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# Функция для вывода заголовка раздела
-print_header() {
-    print_message $BLUE "========================================"
-    print_message $BLUE "$1"
-    print_message $BLUE "========================================"
+info() {
+    # Вывод информационного сообщения (синий цвет)
+    echo -e "${BLUE}[INFO]${NC} $1"
+    log "INFO: $1"
 }
 
-# Функция для проверки наличия команды
-check_command() {
-    if ! command -v $1 &> /dev/null; then
-        print_message $RED "Ошибка: $1 не найден. Пожалуйста, установите $1."
+success() {
+    # Вывод сообщения об успехе (зеленый цвет)
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    log "SUCCESS: $1"
+}
+
+warning() {
+    # Вывод предупреждения (желтый цвет)
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+    log "WARNING: $1"
+}
+
+error() {
+    # Вывод ошибки (красный цвет)
+    echo -e "${RED}[ERROR]${NC} $1"
+    log "ERROR: $1"
+}
+
+# ============================================================================
+# Функции проверки зависимостей
+# ============================================================================
+
+check_root() {
+    # Проверка прав суперпользователя
+    if [ "$EUID" -ne 0 ]; then
+        error "Скрипт должен выполняться от root (используйте sudo)"
+        exit 1
+    fi
+    success "Права root подтверждены"
+}
+
+check_docker() {
+    # Проверка наличия Docker
+    if ! command -v docker &> /dev/null; then
+        error "Docker не установлен. Установите Docker сначала."
         return 1
     fi
+    
+    if ! command -v docker-compose &> /dev/null; then
+        error "Docker Compose не установлен. Установите Docker Compose."
+        return 1
+    fi
+    
+    success "Docker и Docker Compose найдены (версия: $(docker --version))"
     return 0
 }
 
-# Функция для установки зависимостей Debian/Ubuntu
-install_debian_deps() {
-    print_header "Установка системных зависимостей (Debian/Ubuntu)"
+check_python() {
+    # Проверка наличия Python
+    if ! command -v python3 &> /dev/null; then
+        error "Python 3 не установлен. Установите Python 3.11+"
+        return 1
+    fi
     
-    # Обновление списков пакетов
-    apt-get update
+    local version=$(python3 --version | cut -d' ' -f2)
+    info "Python версия: $version"
+    return 0
+}
+
+check_nodejs() {
+    # Проверка наличия Node.js
+    if ! command -v node &> /dev/null; then
+        error "Node.js не установлен. Установите Node.js 20+"
+        return 1
+    fi
     
-    # Установка необходимых пакетов
-    apt-get install -y \
-        python3 \
+    info "Node.js версия: $(node --version)"
+    return 0
+}
+
+# ============================================================================
+# Функции установки зависимостей
+# ============================================================================
+
+install_system_packages() {
+    # Установка системных пакетов через apt
+    info "Обновление списков пакетов..."
+    apt-get update -qq
+    
+    info "Установка системных зависимостей..."
+    apt-get install -y -qq \
         python3-pip \
         python3-venv \
         python3-dev \
-        build-essential \
-        libssl-dev \
-        libffi-dev \
-        git \
-        curl \
-        wget \
-        nginx \
-        supervisor \
-        geoip-bin \
-        libgeoip1 \
-        libgeoip-dev \
-        sqlite3 \
-        logrotate
-    
-    print_message $GREEN "Системные зависимости установлены успешно"
-}
-
-# Функция для установки зависимостей CentOS/RHEL
-install_rhel_deps() {
-    print_header "Установка системных зависимостей (CentOS/RHEL)"
-    
-    # Установка EPEL репозитория
-    yum install -y epel-release
-    
-    # Обновление системы
-    yum update -y
-    
-    # Установка необходимых пакетов
-    yum install -y \
-        python3 \
-        python3-pip \
-        python3-devel \
+        libpq-dev \
         gcc \
-        gcc-c++ \
-        openssl-devel \
-        libffi-devel \
-        git \
         curl \
+        git \
         wget \
+        build-essential \
         nginx \
         supervisor \
-        GeoIP \
-        GeoIP-data \
-        sqlite \
-        logrotate
+        || { error "Не удалось установить системные пакеты"; exit 1; }
     
-    print_message $GREEN "Системные зависимости установлены успешно"
+    success "Системные пакеты установлены"
 }
 
-# Функция для настройки виртуального окружения Python
-setup_python_venv() {
-    print_header "Настройка виртуального окружения Python"
+install_docker() {
+    # Установка Docker если не установлен
+    if check_docker; then
+        info "Docker уже установлен, пропускаем установку"
+        return 0
+    fi
     
-    # Создание директории проекта
-    mkdir -p ${PROJECT_DIR}
+    info "Установка Docker..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    rm get-docker.sh
+    
+    # Добавляем текущего пользователя в группу docker
+    usermod -aG docker $SUDO_USER 2>/dev/null || true
+    
+    success "Docker установлен"
+}
+
+install_nodejs() {
+    # Установка Node.js если не установлен
+    if command -v node &> /dev/null; then
+        info "Node.js уже установлен, пропускаем"
+        return 0
+    fi
+    
+    info "Установка Node.js 20..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+    
+    success "Node.js установлен"
+}
+
+# ============================================================================
+# Функции настройки бэкенда
+# ============================================================================
+
+setup_backend_without_docker() {
+    info "Настройка бэкенда (без Docker)..."
+    
+    cd "$BACKEND_DIR"
     
     # Создание виртуального окружения
-    python3 -m venv ${VENV_DIR}
+    info "Создание Python виртуального окружения..."
+    python3 -m venv venv
+    source venv/bin/activate
     
-    # Активация виртуального окружения
-    source ${VENV_DIR}/bin/activate
+    # Установка зависимостей
+    info "Установка Python зависимостей..."
+    pip install --upgrade pip -q
+    pip install -r requirements.txt -q
     
-    # Обновление pip
-    pip install --upgrade pip
+    success "Зависимости бэкенда установлены"
     
-    # Установка зависимостей из requirements.txt
-    if [ -f "${BACKEND_DIR}/requirements.txt" ]; then
-        pip install -r ${BACKEND_DIR}/requirements.txt
-        print_message $GREEN "Python зависимости установлены успешно"
-    else
-        print_message $RED "Файл requirements.txt не найден"
-        return 1
+    # Настройка переменных окружения
+    info "Настройка переменных окружения..."
+    cat > .env << EOF
+DJANGO_SECRET_KEY=django-insecure-change-this-in-production-$(openssl rand -hex 32)
+DJANGO_DEBUG=True
+DJANGO_ALLOWED_HOSTS=*
+POSTGRES_DB=cyber_threat_db
+POSTGRES_USER=cyber_user
+POSTGRES_PASSWORD=cyber_password_$(openssl rand -hex 8)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+REDIS_URL=redis://localhost:6379/0
+EOF
+    
+    success "Файл .env создан"
+}
+
+setup_database() {
+    info "Настройка базы данных PostgreSQL..."
+    
+    # Установка PostgreSQL если не установлен
+    if ! command -v psql &> /dev/null; then
+        info "Установка PostgreSQL..."
+        apt-get install -y -qq postgresql postgresql-contrib
+    fi
+    
+    # Запуск службы PostgreSQL
+    systemctl start postgresql
+    systemctl enable postgresql
+    
+    # Создание базы данных и пользователя
+    local db_password="cyber_password_$(openssl rand -hex 8)"
+    
+    sudo -u postgres psql -c "CREATE USER cyber_user WITH PASSWORD '$db_password';" 2>/dev/null || true
+    sudo -u postgres psql -c "CREATE DATABASE cyber_threat_db OWNER cyber_user;" 2>/dev/null || true
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE cyber_threat_db TO cyber_user;" 2>/dev/null || true
+    
+    success "База данных PostgreSQL создана"
+    
+    # Обновление .env файла с паролем БД
+    if [ -f "$BACKEND_DIR/.env" ]; then
+        sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$db_password/" "$BACKEND_DIR/.env"
     fi
 }
 
-# Функция для настройки базы данных Django
-setup_django_db() {
-    print_header "Настройка базы данных Django"
+setup_redis() {
+    info "Настройка Redis..."
     
-    # Активация виртуального окружения
-    source ${VENV_DIR}/bin/activate
+    # Установка Redis если не установлен
+    if ! command -v redis-server &> /dev/null; then
+        info "Установка Redis..."
+        apt-get install -y -qq redis-server
+    fi
     
-    # Переход в директорию бэкенда
-    cd ${BACKEND_DIR}
+    # Запуск службы Redis
+    systemctl start redis-server
+    systemctl enable redis-server
+    
+    success "Redis настроен и запущен"
+}
+
+run_migrations() {
+    info "Выполнение миграций Django..."
+    
+    cd "$BACKEND_DIR"
+    source venv/bin/activate
     
     # Применение миграций
     python manage.py migrate
@@ -150,246 +265,387 @@ setup_django_db() {
     # Сбор статических файлов
     python manage.py collectstatic --noinput
     
-    # Создание суперпользователя
-    python manage.py shell << EOF
-from django.contrib.auth import get_user_model
-User = get_user_model()
-if not User.objects.filter(username='${ADMIN_USER}').exists():
-    User.objects.create_superuser(
-        username='${ADMIN_USER}',
-        email='${ADMIN_EMAIL}',
-        password='${ADMIN_PASS}'
-    )
-    print('Суперпользователь создан успешно')
-else:
-    print('Суперпользователь уже существует')
-EOF
-    
-    print_message $GREEN "База данных настроена успешно"
+    success "Миграции выполнены"
 }
 
-# Функция для настройки Nginx
-setup_nginx() {
-    print_header "Настройка веб-сервера Nginx"
+create_superuser() {
+    if [ "$CREATE_SUPERUSER" = false ]; then
+        info "Создание суперпользователя пропущено"
+        return 0
+    fi
     
-    # Создание конфигурационного файла Nginx
-    cat > /etc/nginx/sites-available/cyber-threat-map << EOF
+    info "Создание суперпользователя..."
+    
+    cd "$BACKEND_DIR"
+    source venv/bin/activate
+    
+    # Создание суперпользователя через manages.py
+    python manage.py shell << EOF
+from api.models import User
+if not User.objects.filter(username='$ADMIN_USERNAME').exists():
+    User.objects.create_superuser(
+        username='$ADMIN_USERNAME',
+        email='$ADMIN_EMAIL',
+        password='$ADMIN_PASSWORD',
+        is_staff=True
+    )
+    print('Суперпользователь создан')
+else:
+    print('Пользователь уже существует')
+EOF
+    
+    success "Суперпользователь создан (логин: $ADMIN_USERNAME, пароль: $ADMIN_PASSWORD)"
+}
+
+# ============================================================================
+# Функции настройки фронтенда
+# ============================================================================
+
+setup_frontend_without_docker() {
+    if [ "$INSTALL_FRONTEND" = false ]; then
+        info "Установка фронтенда пропущена"
+        return 0
+    fi
+    
+    info "Настройка фронтенда (без Docker)..."
+    
+    cd "$FRONTEND_DIR"
+    
+    # Установка зависимостей npm
+    info "Установка npm зависимостей..."
+    npm install --legacy-peer-deps
+    
+    # Сборка production версии
+    info "Сборка фронтенда..."
+    npm run build
+    
+    success "Фронтенд собран"
+    
+    # Копирование статики в директорию Nginx
+    info "Копирование статики в Nginx..."
+    cp -r dist/* /var/www/html/ 2>/dev/null || cp -r dist/* /usr/share/nginx/html/ 2>/dev/null || true
+    
+    success "Статика скопирована"
+}
+
+setup_nginx() {
+    info "Настройка Nginx..."
+    
+    # Создание конфигурации Nginx
+    cat > /etc/nginx/sites-available/cyber-threat-map << 'EOF'
 server {
     listen 80;
-    server_name _;
+    server_name localhost;
     
-    # Директория для статических файлов Django
-    location /static/ {
-        alias ${BACKEND_DIR}/staticfiles/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
+    root /usr/share/nginx/html;
+    index index.html;
+    
+    location / {
+        try_files $uri $uri/ /index.html;
     }
     
-    # Проксирование запросов к Django приложению
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_connect_timeout 60s;
-        proxy_read_timeout 60s;
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+    
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8000/admin/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
 }
 EOF
     
-    # Создание символической ссылки
+    # Включение сайта
     ln -sf /etc/nginx/sites-available/cyber-threat-map /etc/nginx/sites-enabled/
-    
-    # Удаление дефолтной конфигурации
     rm -f /etc/nginx/sites-enabled/default
     
-    # Проверка конфигурации Nginx
-    nginx -t
+    # Проверка конфигурации и перезапуск
+    nginx -t && systemctl restart nginx
     
-    # Перезапуск Nginx
-    systemctl restart nginx
-    systemctl enable nginx
-    
-    print_message $GREEN "Nginx настроен успешно"
+    success "Nginx настроен"
 }
 
-# Функция для настройки Supervisor
-setup_supervisor() {
-    print_header "Настройка Supervisor для управления процессами"
-    
-    # Создание конфигурационного файла Supervisor
-    cat > /etc/supervisor/conf.d/cyber-threat-map.conf << EOF
-[program:cyber-threat-map]
-command=${VENV_DIR}/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 cyber_threat_map.wsgi:application
-directory=${BACKEND_DIR}
-user=root
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-numprocs=1
-redirect_stderr=true
-stdout_logfile=/var/log/cyber-threat-map/gunicorn.log
-stdout_logfile_maxbytes=50MB
-stdout_logfile_backups=10
-environment=DJANGO_SETTINGS_MODULE="cyber_threat_map.settings"
-EOF
-    
-    # Создание директории для логов
-    mkdir -p /var/log/cyber-threat-map
-    
-    # Обновление конфигурации Supervisor
-    supervisorctl reread
-    supervisorctl update
-    supervisorctl start cyber-threat-map
-    
-    print_message $GREEN "Supervisor настроен успешно"
-}
+# ============================================================================
+# Функции для Docker режима
+# ============================================================================
 
-# Функция для настройки логирования фаервола
-setup_firewall_logging() {
-    print_header "Настройка логирования фаервола"
+deploy_with_docker() {
+    info "Развертывание с Docker..."
     
-    # Настройка iptables для логирования
-    # Добавляем правило для логирования входящих соединений
-    iptables -A INPUT -j LOG --log-prefix "CYBER_THREAT_MAP: " --log-level 4 2>/dev/null || true
-    
-    # Для ufw включаем логирование
-    if command -v ufw &> /dev/null; then
-        ufw logging on 2>/dev/null || true
-    fi
-    
-    # Для nftables создаем таблицу логирования
-    if command -v nft &> /dev/null; then
-        nft add table inet filter 2>/dev/null || true
-        nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }' 2>/dev/null || true
-        nft add rule inet filter input log prefix \"CYBER_THREAT_MAP: \" 2>/dev/null || true
-    fi
-    
-    # Настройка logrotate для логов приложения
-    cat > /etc/logrotate.d/cyber-threat-map << EOF
-/var/log/cyber-threat-map/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    notifempty
-    create 0640 root root
-    sharedscripts
-    postrotate
-        supervisorctl restart cyber-threat-map > /dev/null 2>&1 || true
-    endscript
-}
-EOF
-    
-    print_message $GREEN "Логирование фаервола настроено"
-}
-
-# Функция для установки с Docker
-setup_docker() {
-    print_header "Установка с использованием Docker"
-    
-    # Проверка наличия Docker
-    if ! command -v docker &> /dev/null; then
-        print_message $YELLOW "Docker не найден. Установка Docker..."
-        curl -fsSL https://get.docker.com | sh
-    fi
-    
-    # Проверка наличия Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
-        print_message $YELLOW "Docker Compose не найден. Установка..."
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-    fi
-    
-    # Переход в директорию проекта
-    cd ${PROJECT_DIR}
+    cd "$PROJECT_DIR"
     
     # Сборка и запуск контейнеров
-    docker-compose up -d --build
+    info "Сборка Docker образов (может занять время)..."
+    docker-compose build --no-cache
     
-    # Применение миграций
-    docker-compose exec -T backend python manage.py migrate
+    info "Запуск контейнеров..."
+    docker-compose up -d
     
-    # Создание суперпользователя
-    docker-compose exec -T backend python manage.py shell << EOF
-from django.contrib.auth import get_user_model
-User = get_user_model()
-if not User.objects.filter(username='${ADMIN_USER}').exists():
-    User.objects.create_superuser('${ADMIN_USER}', '${ADMIN_EMAIL}', '${ADMIN_PASS}')
+    # Ожидание готовности сервисов
+    info "Ожидание готовности сервисов..."
+    sleep 30
+    
+    # Создание суперпользователя в Docker
+    if [ "$CREATE_SUPERUSER" = true ]; then
+        info "Создание суперпользователя..."
+        docker-compose exec -T backend python manage.py shell << EOF
+from api.models import User
+if not User.objects.filter(username='$ADMIN_USERNAME').exists():
+    User.objects.create_superuser(
+        username='$ADMIN_USERNAME',
+        email='$ADMIN_EMAIL',
+        password='$ADMIN_PASSWORD',
+        is_staff=True
+    )
     print('Суперпользователь создан')
 EOF
-    
-    print_message $GREEN "Docker установка завершена успешно"
-}
-
-# Функция для показа итоговой информации
-show_final_info() {
-    print_header "Установка завершена успешно!"
-    
-    print_message $GREEN "Приложение доступно по адресу: http://$(hostname -I | awk '{print $1}')"
-    print_message $YELLOW "Административная панель: http://$(hostname -I | awk '{print $1}')/admin/"
-    print_message $YELLOW "API доступен по адресу: http://$(hostname -I | awk '{print $1}')/api/"
-    print_message $WHITE "Логин администратора: ${ADMIN_USER}"
-    print_message $WHITE "Пароль администратора: ${ADMIN_PASS}"
-    print_message $RED "ВАЖНО: Измените пароль администратора после первого входа!"
-    
-    print_message $BLUE "Полезные команды:"
-    echo "  - Перезапуск приложения: supervisorctl restart cyber-threat-map"
-    echo "  - Просмотр логов: tail -f /var/log/cyber-threat-map/gunicorn.log"
-    echo "  - Остановка приложения: supervisorctl stop cyber-threat-map"
-    echo "  - Статус приложения: supervisorctl status cyber-threat-map"
-}
-
-# Основная функция установки без Docker
-install_without_docker() {
-    print_header "Начало установки (режим без Docker)"
-    
-    # Определение дистрибутива
-    if [ -f /etc/debian_version ]; then
-        install_debian_deps
-    elif [ -f /etc/redhat-release ]; then
-        install_rhel_deps
-    else
-        print_message $RED "Неподдерживаемый дистрибутив Linux"
-        exit 1
+        success "Суперпользователь создан"
     fi
     
-    # Настройка Python окружения
-    setup_python_venv
-    
-    # Настройка базы данных
-    setup_django_db
-    
-    # Настройка Nginx
-    setup_nginx
-    
-    # Настройка Supervisor
-    setup_supervisor
-    
-    # Настройка логирования
-    setup_firewall_logging
-    
-    # Показ итоговой информации
-    show_final_info
+    success "Docker контейнеры запущены"
 }
 
-# Обработка аргументов командной строки
-case "${1:-without-docker}" in
-    --docker|-d)
-        setup_docker
-        ;;
-    --without-docker|-w)
-        install_without_docker
-        ;;
-    --help|-h)
-        echo "Использование: $0 [--docker|--without-docker|--help]"
-        echo "  --docker, -d      Установка с использованием Docker"
-        echo "  --without-docker, -w  Установка без Docker (прямая на сервер)"
-        echo "  --help, -h        Показать эту справку"
-        ;;
-    *)
-        install_without_docker
-        ;;
-esac
+# ============================================================================
+# Функции создания systemd сервисов
+# ============================================================================
+
+create_systemd_services() {
+    info "Создание systemd сервисов..."
+    
+    # Сервис для бэкенда
+    cat > /etc/systemd/system/cyber-backend.service << EOF
+[Unit]
+Description=Cyber Threat Map Backend
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=notify
+User=root
+WorkingDirectory=$BACKEND_DIR
+Environment="PATH=$BACKEND_DIR/venv/bin"
+ExecStart=$BACKEND_DIR/venv/bin/gunicorn --bind 127.0.0.1:8000 --workers 4 cyber_threat_map.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Сервис для Celery worker
+    cat > /etc/systemd/system/cyber-celery.service << EOF
+[Unit]
+Description=Cyber Threat Map Celery Worker
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$BACKEND_DIR
+Environment="PATH=$BACKEND_DIR/venv/bin"
+ExecStart=$BACKEND_DIR/venv/bin/celery -A cyber_threat_map worker --loglevel=info
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Перезагрузка systemd и запуск сервисов
+    systemctl daemon-reload
+    systemctl enable cyber-backend cyber-celery
+    systemctl start cyber-backend cyber-celery
+    
+    success "Systemd сервисы созданы и запущены"
+}
+
+# ============================================================================
+# Функция настройки фаервола
+# ============================================================================
+
+configure_firewall() {
+    info "Настройка правил фаервола для логирования атак..."
+    
+    # Проверка наличия iptables
+    if ! command -v iptables &> /dev/null; then
+        warning "iptables не найден, пропускаем настройку фаервола"
+        return 0
+    fi
+    
+    # Сохранение текущих правил
+    iptables-save > /root/iptables.backup.$(date +%Y%m%d%H%M%S)
+    
+    # Добавление правил логирования
+    info "Добавление правил логирования входящих соединений..."
+    
+    # Логирование новых входящих соединений (для демонстрации)
+    iptables -A INPUT -m state --state NEW -j LOG --log-prefix "CYBER_THREAT_MAP: " --log-level 4 2>/dev/null || true
+    
+    # Сохранение правил (если есть persistence)
+    if command -v iptables-persistent &> /dev/null; then
+        iptables-save > /etc/iptables/rules.v4
+        success "Правила iptables сохранены"
+    fi
+    
+    success "Фаервол настроен для логирования"
+    
+    info "Пример логов:"
+    info "  journalctl -f | grep CYBER_THREAT_MAP"
+    info "  или /var/log/syslog | grep CYBER_THREAT_MAP"
+}
+
+# ============================================================================
+# Основная функция установки
+# ============================================================================
+
+main() {
+    echo "=============================================="
+    echo "  Карта Киберугроз - Установка проекта"
+    echo "=============================================="
+    echo ""
+    
+    # Парсинг аргументов командной строки
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --without-docker)
+                USE_DOCKER=false
+                shift
+                ;;
+            --no-frontend)
+                INSTALL_FRONTEND=false
+                shift
+                ;;
+            --no-superuser)
+                CREATE_SUPERUSER=false
+                shift
+                ;;
+            --admin-user=*)
+                ADMIN_USERNAME="${1#*=}"
+                shift
+                ;;
+            --admin-password=*)
+                ADMIN_PASSWORD="${1#*=}"
+                shift
+                ;;
+            --help)
+                echo "Использование: $0 [опции]"
+                echo ""
+                echo "Опции:"
+                echo "  --without-docker      Установить без Docker (нативная установка)"
+                echo "  --no-frontend         Не устанавливать фронтенд"
+                echo "  --no-superuser        Не создавать суперпользователя"
+                echo "  --admin-user=NAME     Имя суперпользователя (по умолчанию: admin)"
+                echo "  --admin-password=PWD  Пароль суперпользователя"
+                echo "  --help                Показать эту справку"
+                exit 0
+                ;;
+            *)
+                error "Неизвестная опция: $1"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Проверка прав root
+    check_root
+    
+    # Логирование начала установки
+    log "Начало установки проекта Карта Киберугроз"
+    log "Режим Docker: $USE_DOCKER"
+    
+    if [ "$USE_DOCKER" = true ]; then
+        # ========== Установка с Docker ==========
+        info "Выбран режим установки с Docker"
+        
+        # Проверка Docker
+        if ! check_docker; then
+            install_docker
+        fi
+        
+        # Развертывание
+        deploy_with_docker
+        
+        success "Установка с Docker завершена!"
+        
+    else
+        # ========== Установка без Docker ==========
+        info "Выбран режим нативной установки (без Docker)"
+        
+        # Проверка зависимостей
+        check_python || { install_system_packages; }
+        check_nodejs || install_nodejs
+        
+        # Установка системных пакетов
+        install_system_packages
+        
+        # Настройка бэкенда
+        setup_backend_without_docker
+        
+        # Настройка базы данных
+        setup_database
+        
+        # Настройка Redis
+        setup_redis
+        
+        # Выполнение миграций
+        run_migrations
+        
+        # Создание суперпользователя
+        create_superuser
+        
+        # Настройка фронтенда
+        setup_frontend_without_docker
+        
+        # Настройка Nginx
+        setup_nginx
+        
+        # Создание systemd сервисов
+        create_systemd_services
+        
+        # Настройка фаервола
+        configure_firewall
+        
+        success "Нативная установка завершена!"
+    fi
+    
+    # Вывод итоговой информации
+    echo ""
+    echo "=============================================="
+    echo "  Установка завершена успешно!"
+    echo "=============================================="
+    echo ""
+    echo "Доступ к приложению:"
+    echo "  - Главная страница: http://localhost/"
+    echo "  - API: http://localhost/api/"
+    echo "  - Админ-панель: http://localhost/admin/"
+    echo ""
+    echo "Учетные данные администратора:"
+    echo "  Логин: $ADMIN_USERNAME"
+    echo "  Пароль: $ADMIN_PASSWORD"
+    echo ""
+    echo "Логи установки: $LOG_FILE"
+    echo ""
+    
+    if [ "$USE_DOCKER" = true ]; then
+        echo "Управление Docker контейнерами:"
+        echo "  docker-compose ps              # Статус контейнеров"
+        echo "  docker-compose logs -f         # Просмотр логов"
+        echo "  docker-compose down            # Остановка"
+        echo "  docker-compose restart         # Перезапуск"
+    else
+        echo "Управление сервисами:"
+        echo "  systemctl status cyber-backend # Статус бэкенда"
+        echo "  systemctl status cyber-celery  # Статус Celery"
+        echo "  systemctl status nginx         # Статус Nginx"
+        echo "  journalctl -f                  # Логи системы"
+    fi
+    echo ""
+    
+    log "Установка успешно завершена"
+}
+
+# Запуск основной функции
+main "$@"
